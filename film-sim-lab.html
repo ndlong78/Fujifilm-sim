@@ -1,0 +1,901 @@
+<title>Film Sim Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: darkroom workbench — neutral viewing stage on the left, recipe panel on the right; stacks on phones. */
+:root {
+  --bg: #111311;
+  --panel: #181a18;
+  --raise: #212421;
+  --line: #2d312d;
+  --fg: #e8ebe5;
+  --muted: #959b92;
+  --accent: #f0a33a;
+  --accent-ink: #1b1306;
+  --stage: #0a0b0a;
+  --stage-fg: #c9cdc6;
+  --font-display: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #e9ece7; --panel: #f5f6f3; --raise: #ffffff; --line: #d0d5cd;
+    --fg: #161915; --muted: #5a6157; --accent: #a65d00; --accent-ink: #ffffff;
+    --stage: #c4c8c1; --stage-fg: #2b2f2a; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #e9ece7; --panel: #f5f6f3; --raise: #ffffff; --line: #d0d5cd;
+  --fg: #161915; --muted: #5a6157; --accent: #a65d00; --accent-ink: #ffffff;
+  --stage: #c4c8c1; --stage-fg: #2b2f2a; color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+header.top {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line); background: var(--panel);
+}
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
+.brand h1 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: .02em; text-transform: uppercase; line-height: 1; }
+.brand .code { font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: .08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise);
+  font-weight: 500; font-size: 13px; white-space: nowrap;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; }
+
+.work { display: grid; grid-template-columns: minmax(0, 1fr) 372px; min-height: 0; }
+.stage { position: relative; background: var(--stage); min-height: 0; display: grid; place-items: center; overflow: hidden; }
+.frame { position: relative; touch-action: none; cursor: ew-resize; box-shadow: 0 10px 40px rgba(0,0,0,.35); }
+.frame canvas { display: block; width: 100%; height: 100%; }
+.split { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
+.split::before { content: ""; position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.knob {
+  position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%); pointer-events: auto;
+  width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #111; border: 0;
+  display: grid; place-items: center; font-family: var(--font-mono); font-size: 13px; cursor: ew-resize; box-shadow: 0 2px 10px rgba(0,0,0,.4);
+}
+.tag {
+  position: absolute; top: 10px; padding: 3px 7px; border-radius: 4px; pointer-events: none;
+  background: rgba(0,0,0,.55); color: #fff; font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+}
+.tag.l { left: 10px; } .tag.r { right: 10px; }
+.edge {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 14px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; color: var(--accent); text-transform: uppercase;
+  display: flex; gap: 18px; flex-wrap: wrap; pointer-events: none; opacity: .9;
+}
+.drop { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 10px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--stage) 80%, transparent); color: var(--stage-fg); font-family: var(--font-display); font-size: 24px; letter-spacing: .04em; text-transform: uppercase; pointer-events: none; }
+.glfail { color: var(--stage-fg); max-width: 40ch; text-align: center; padding: 24px; }
+
+aside.panel { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; min-height: 0; }
+.sec { padding: 14px 16px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+.sec h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; }
+.sec h2 small { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em; text-transform: none; }
+
+.sims { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sim {
+  display: grid; grid-template-columns: 6px 1fr; gap: 9px; align-items: center; text-align: left; cursor: pointer;
+  padding: 7px 9px 7px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise);
+  font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .02em; line-height: 1.1;
+}
+.sim i { display: block; width: 6px; height: 22px; border-radius: 2px; }
+.sim[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.presets { display: grid; gap: 6px; }
+.preset {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px; text-align: left; cursor: pointer;
+  padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise);
+}
+.preset b { font-weight: 600; }
+.preset span { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.preset[aria-pressed="true"] { border-color: var(--accent); }
+
+.row { display: grid; gap: 5px; }
+.row .lab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; user-select: none; }
+.row .lab output { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.row input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; height: 22px; }
+.segs { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.segs button { flex: 1; padding: 6px 4px; border: 0; background: var(--raise); cursor: pointer; font-size: 12.5px; border-right: 1px solid var(--line); }
+.segs button:last-child { border-right: 0; }
+.segs button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+.card {
+  margin: 0; padding: 12px; border-radius: 6px; background: var(--stage); color: var(--stage-fg);
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-x: auto; border: 1px solid var(--line);
+}
+.inline { display: flex; gap: 6px; }
+.inline input[type=text] { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise); }
+.saved { display: grid; gap: 6px; }
+.saved .item { display: flex; gap: 6px; }
+.saved .item .preset { flex: 1; min-width: 0; }
+.saved .item .preset b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved .del { width: 34px; justify-content: center; padding: 0; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 30;
+  background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 6px; font-weight: 500; font-size: 13px; }
+.modal { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.78); display: grid; place-items: center;
+  padding-block: max(16px, env(safe-area-inset-top, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; max-width: min(1100px, 100%); max-height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.modal .bar { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.modal .bar p { margin: 0; flex: 1; min-width: 200px; font-size: 13px; }
+.modal .bar p span { font-family: var(--font-mono); color: var(--muted); font-size: 11.5px; }
+.modal img { display: block; max-width: 100%; max-height: 78vh; margin: auto; object-fit: contain; background: var(--stage); }
+
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  .app { height: auto; }
+  .work { grid-template-columns: 1fr; }
+  .edge { gap: 10px; padding: 6px 10px; font-size: 10px; }
+  .stage { height: 46vh; min-height: 280px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+  aside.panel { border-left: 0; overflow: visible; }
+  .sec { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .brand h1 { font-size: 22px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .sim, .preset, .segs button { transition: border-color .12s, background-color .12s; }
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Film Sim Lab</h1>
+      <span class="code" id="edgeCode">▸ 14 SIMS · WEBGL</span>
+    </div>
+    <div class="actions">
+      <label class="btn" for="file">Mở ảnh</label>
+      <input id="file" type="file" accept="image/*" hidden>
+      <button class="btn" id="btnSample" type="button">Ảnh mẫu</button>
+      <button class="btn ghost" id="btnReset" type="button">Đặt lại</button>
+      <button class="btn primary" id="btnExport" type="button">Xuất ảnh</button>
+    </div>
+  </header>
+
+  <div class="work">
+    <section class="stage" id="stage" aria-label="Khung xem ảnh">
+      <div class="frame" id="frame">
+        <canvas id="gl"></canvas>
+        <div class="split" id="split"><button class="knob" id="knob" type="button" aria-label="Kéo để so sánh với ảnh gốc">⇆</button></div>
+        <span class="tag l" id="tagL">Gốc</span>
+        <span class="tag r" id="tagR">Provia</span>
+      </div>
+      <div class="edge" id="edge"></div>
+      <div class="drop" id="drop" hidden>Thả ảnh vào đây</div>
+    </section>
+
+    <aside class="panel" aria-label="Recipe">
+      <div class="sec">
+        <h2>Film Simulation <small id="simCount"></small></h2>
+        <div class="sims" id="sims"></div>
+      </div>
+      <div class="sec">
+        <h2>Recipe dựng sẵn</h2>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div class="sec"><h2>Tông &amp; dải sáng</h2><div class="row-group" id="g-tone"></div></div>
+      <div class="sec"><h2>Màu</h2><div id="g-color"></div></div>
+      <div class="sec"><h2>Cân bằng trắng</h2><div id="g-wb"></div></div>
+      <div class="sec"><h2>Chi tiết &amp; hạt</h2><div id="g-detail"></div></div>
+      <div class="sec">
+        <h2>Recipe card <small>chép lên máy</small></h2>
+        <div class="inline">
+          <input id="recipeName" type="text" maxlength="40" aria-label="Tên recipe" value="Recipe của tôi">
+          <button class="btn" id="btnCopy" type="button">Chép</button>
+        </div>
+        <pre class="card" id="card"></pre>
+        <div class="inline">
+          <button class="btn" id="btnSave" type="button">Lưu recipe vào trình duyệt</button>
+        </div>
+        <div class="saved" id="saved"></div>
+        <p class="hint" id="savedHint">Recipe lưu ở trình duyệt này, máy khác không thấy.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="modal" id="modal" hidden>
+  <div class="box">
+    <div class="bar">
+      <p>Nhấn giữ (điện thoại) hoặc chuột phải → <b>Lưu ảnh</b>. <span id="expInfo"></span></p>
+      <button class="btn" id="btnClose" type="button">Đóng</button>
+    </div>
+    <img id="expImg" alt="Ảnh đã xuất">
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- Film simulation parameter table ----------
+   Sectors: R(0°) Y(60°) G(120°) C(180°) B(240°) M(300°)
+   hue: shift in degrees · satS/lumS: per-sector multipliers
+   con: S-curve strength · hl/sh: built-in tone offset · gam: midtone gamma · lift: black lift
+   tS/tH: additive split-tone for shadows / highlights (sRGB) */
+const SIMS = [
+  { id: 'provia', name: 'Provia', card: 'Provia/Standard', sw: '#2f8a52', sat: 1.0, con: 0.15, hl: 0, sh: 0, gam: 1, lift: 0,
+    hue: [0, 0, 0, 0, 0, 0], satS: [1.04, 1, 1.02, 1, 1.03, 1], lumS: [1, 1, 1, 1, 1, 1], tS: [0, 0, 0], tH: [0, 0, 0] },
+  { id: 'velvia', name: 'Velvia', card: 'Velvia/Vivid', sw: '#b0306a', sat: 1.32, con: 0.4, hl: 0.5, sh: 0.5, gam: 1.03, lift: 0,
+    hue: [-3, -5, 6, 0, 6, -4], satS: [1.15, 1.08, 1.15, 1.1, 1.18, 1.1], lumS: [0.95, 1, 0.92, 0.95, 0.86, 0.95], tS: [0, 0, 0.004], tH: [0, 0, 0] },
+  { id: 'astia', name: 'Astia', card: 'Astia/Soft', sw: '#d8b237', sat: 1.04, con: 0.05, hl: -0.5, sh: -0.5, gam: 0.98, lift: 0.004,
+    hue: [3, 0, 0, 0, 0, 0], satS: [0.95, 1.0, 1.05, 1.05, 1.1, 0.95], lumS: [1.03, 1.03, 1, 1, 0.98, 1], tS: [0, 0, 0], tH: [0.006, 0.003, 0] },
+  { id: 'cc', name: 'Classic Chrome', card: 'Classic Chrome', sw: '#7c7766', sat: 0.8, con: 0.25, hl: -0.5, sh: 0.75, gam: 1.02, lift: 0.012,
+    hue: [-2, -6, -8, 0, -6, 0], satS: [0.96, 0.8, 0.74, 0.9, 0.86, 0.8], lumS: [0.95, 1, 0.95, 0.95, 0.86, 1], tS: [-0.008, 0.002, 0.01], tH: [0.008, 0.004, -0.006] },
+  { id: 'pnh', name: 'Pro Neg Hi', card: 'Pro Neg. Hi', sw: '#2f5f9e', sat: 0.94, con: 0.2, hl: 0, sh: 0.5, gam: 1, lift: 0.004,
+    hue: [2, -2, 0, 0, 0, 0], satS: [0.98, 0.92, 0.9, 0.95, 0.95, 0.92], lumS: [1.02, 1.01, 0.98, 1, 0.97, 1], tS: [0, 0, 0.004], tH: [0.004, 0.002, 0] },
+  { id: 'pns', name: 'Pro Neg Std', card: 'Pro Neg. Std', sw: '#5c86b8', sat: 0.86, con: -0.05, hl: -0.5, sh: -0.5, gam: 0.99, lift: 0.008,
+    hue: [2, -2, 2, 0, 0, 0], satS: [0.95, 0.88, 0.86, 0.92, 0.92, 0.9], lumS: [1.02, 1.01, 0.98, 1, 0.98, 1], tS: [0, 0.002, 0.004], tH: [0.003, 0.002, 0] },
+  { id: 'cn', name: 'Classic Neg', card: 'Classic Negative', sw: '#2e8b88', sat: 0.86, con: 0.35, hl: -0.5, sh: 1, gam: 1.03, lift: 0.02,
+    hue: [-6, -10, 12, 0, -8, 0], satS: [1.05, 0.85, 0.8, 1, 0.9, 0.85], lumS: [0.95, 1, 0.9, 0.95, 0.9, 1], tS: [-0.012, 0.008, 0.012], tH: [0.014, 0.002, -0.009] },
+  { id: 'nn', name: 'Nostalgic Neg', card: 'Nostalgic Neg.', sw: '#c9822c', sat: 0.95, con: 0.15, hl: -0.5, sh: 0.5, gam: 1.01, lift: 0.015,
+    hue: [4, -6, -6, 0, -4, 0], satS: [1.05, 1.1, 0.85, 0.9, 0.85, 0.9], lumS: [1, 1.02, 0.95, 0.97, 0.92, 1], tS: [0.004, 0, -0.004], tH: [0.03, 0.012, -0.025] },
+  { id: 'reala', name: 'Reala Ace', card: 'Reala Ace', sw: '#c23b3b', sat: 1.05, con: 0.2, hl: 0, sh: 0.5, gam: 1, lift: 0,
+    hue: [0, -2, 2, 0, 0, 0], satS: [1.03, 1, 1.02, 1, 1.03, 1], lumS: [1, 1, 0.99, 1, 0.98, 1], tS: [0, 0, 0], tH: [0, 0, 0] },
+  { id: 'eterna', name: 'Eterna', card: 'Eterna/Cinema', sw: '#25525a', sat: 0.66, con: -0.3, hl: -1, sh: -1, gam: 0.97, lift: 0.03,
+    hue: [0, -4, 6, 0, -4, 0], satS: [0.9, 0.8, 0.85, 0.9, 0.85, 0.8], lumS: [1, 1, 0.97, 1, 0.97, 1], tS: [-0.01, 0.006, 0.012], tH: [0.006, 0.004, -0.002] },
+  { id: 'ebb', name: 'Eterna Bleach', card: 'Eterna Bleach Bypass', sw: '#8e9592', sat: 0.42, con: 0.5, hl: 1, sh: 1.5, gam: 1.02, lift: 0,
+    hue: [0, -2, 0, 0, 0, 0], satS: [1, 1, 1, 1, 1, 1], lumS: [1, 1, 1, 1, 1, 1], tS: [-0.004, 0, 0.006], tH: [0.004, 0.003, 0] },
+  { id: 'acros', name: 'Acros', card: 'Acros', sw: '#1c1d1c', mono: true, filters: true, con: 0.28, hl: 0, sh: 0.5, gam: 1.02, lift: 0, grainBase: 0.012, toneBase: [0, 0, 0] },
+  { id: 'mono', name: 'Monochrome', card: 'Monochrome', sw: '#77797a', mono: true, filters: true, con: 0.1, hl: 0, sh: 0, gam: 1, lift: 0, grainBase: 0, toneBase: [0, 0, 0] },
+  { id: 'sepia', name: 'Sepia', card: 'Sepia', sw: '#8a5a32', mono: true, con: 0.05, hl: -0.5, sh: 0, gam: 0.98, lift: 0.01, grainBase: 0, toneBase: [0.075, 0.02, -0.07] },
+];
+const SIM = Object.fromEntries(SIMS.map(s => [s.id, s]));
+const FILTERS = { std: [0.299, 0.587, 0.114], ye: [0.36, 0.6, 0.04], r: [0.72, 0.28, 0.0], g: [0.22, 0.72, 0.06] };
+const FILTER_SUFFIX = { std: '', ye: '+Ye', r: '+R', g: '+G' };
+
+const DEFAULTS = {
+  name: 'Recipe của tôi', sim: 'provia', filter: 'std', dr: 100, hl: 0, sh: 0, ev: 0,
+  color: 0, cc: 0, fxb: 0, wc: 0, mg: 0,
+  wbMode: 'auto', k: 5500, wbR: 0, wbB: 0,
+  sharp: 0, clarity: 0, grain: 0, grainSize: 'S',
+};
+
+const PRESETS = [
+  { name: 'Sài Gòn Hoàng Hôn', sim: 'cn', dr: 400, hl: -1, sh: 1, color: 2, sharp: -1, clarity: 0, grain: 1, grainSize: 'S', cc: 2, fxb: 1, wbMode: 'k', k: 6300, wbR: 2, wbB: -4, ev: 1 },
+  { name: 'Hà Nội Mùa Đông', sim: 'cc', dr: 200, hl: 0, sh: 1.5, color: -1, sharp: -2, clarity: 2, grain: 1, grainSize: 'L', cc: 2, fxb: 2, wbMode: 'k', k: 4800, wbR: -1, wbB: 2, ev: -1 },
+  { name: 'Đà Lạt Sương', sim: 'eterna', dr: 400, hl: -1.5, sh: -1, color: -2, sharp: -3, clarity: -3, grain: 1, grainSize: 'S', cc: 0, fxb: 1, wbMode: 'k', k: 5200, wbR: -1, wbB: 1, ev: 2 },
+  { name: 'Hội An Đèn Lồng', sim: 'nn', dr: 400, hl: -1, sh: 0.5, color: 3, sharp: -1, clarity: 1, grain: 2, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'k', k: 5000, wbR: 3, wbB: -5, ev: 0 },
+  { name: 'Mekong Velvia', sim: 'velvia', dr: 200, hl: 0.5, sh: 1, color: 1, sharp: 1, clarity: 1, grain: 0, cc: 1, fxb: 2, wbMode: 'auto', wbR: 0, wbB: 1, ev: -1 },
+  { name: 'Chân Dung Astia', sim: 'astia', dr: 200, hl: -1, sh: -1, color: 0, sharp: -2, clarity: -2, grain: 0, cc: 1, fxb: 0, wbMode: 'auto', wbR: 1, wbB: -1, ev: 1 },
+  { name: 'Phố Cổ Acros', sim: 'acros', filter: 'r', dr: 200, hl: 1, sh: 2, sharp: 1, clarity: 3, grain: 2, grainSize: 'L', wc: 1, mg: 0, ev: 0 },
+];
+
+/* ---------- formatting ---------- */
+const sgn = v => (v > 0 ? '+' : '') + (Number.isInteger(v) ? v : v.toFixed(1));
+const fmtEV = t => {
+  if (!t) return '0';
+  const a = Math.abs(t), w = Math.floor(a / 3), r = a % 3;
+  return (t > 0 ? '+' : '-') + [w || '', r ? r + '/3' : ''].filter(Boolean).join(' ');
+};
+const LEVEL = ['Off', 'Weak', 'Strong'];
+
+/* ---------- controls ---------- */
+const CONTROLS = {
+  'g-tone': [
+    ['seg', 'dr', 'Dynamic Range', [[100, 'DR100'], [200, 'DR200'], [400, 'DR400']]],
+    ['range', 'hl', 'Highlight', -2, 4, 0.5, sgn],
+    ['range', 'sh', 'Shadow', -2, 4, 0.5, sgn],
+    ['range', 'ev', 'Exposure', -9, 9, 1, v => fmtEV(v) + ' EV'],
+  ],
+  'g-color': [
+    ['range', 'color', 'Color', -4, 4, 1, sgn, 'color'],
+    ['seg', 'cc', 'Color Chrome Effect', [[0, 'Off'], [1, 'Weak'], [2, 'Strong']], 'color'],
+    ['seg', 'fxb', 'Color Chrome FX Blue', [[0, 'Off'], [1, 'Weak'], [2, 'Strong']], 'color'],
+    ['seg', 'filter', 'Filter', [['std', 'Std'], ['ye', 'Ye'], ['r', 'R'], ['g', 'G']], 'filter'],
+    ['range', 'wc', 'Monochromatic WC (ấm/lạnh)', -9, 9, 1, sgn, 'mono'],
+    ['range', 'mg', 'Monochromatic MG (magenta/green)', -9, 9, 1, sgn, 'mono'],
+  ],
+  'g-wb': [
+    ['seg', 'wbMode', 'Chế độ', [['auto', 'Auto'], ['k', 'Kelvin']]],
+    ['range', 'k', 'Nhiệt độ màu', 2500, 10000, 100, v => v + 'K', 'kelvin'],
+    ['range', 'wbR', 'WB Shift R', -9, 9, 1, sgn],
+    ['range', 'wbB', 'WB Shift B', -9, 9, 1, sgn],
+  ],
+  'g-detail': [
+    ['range', 'sharp', 'Sharpness', -4, 4, 1, sgn],
+    ['range', 'clarity', 'Clarity', -5, 5, 1, sgn],
+    ['seg', 'grain', 'Grain Effect', [[0, 'Off'], [1, 'Weak'], [2, 'Strong']]],
+    ['seg', 'grainSize', 'Grain Size', [['S', 'Small'], ['L', 'Large']], 'grain'],
+  ],
+};
+
+let R = { ...DEFAULTS };
+let activePreset = -1;
+const $ = id => document.getElementById(id);
+const rows = [];   // {el, vis, sync}
+
+function buildControls() {
+  for (const [gid, list] of Object.entries(CONTROLS)) {
+    const host = $(gid);
+    host.style.display = 'grid'; host.style.gap = '12px';
+    for (const spec of list) {
+      const [type, key, label] = spec;
+      const row = document.createElement('div');
+      row.className = 'row';
+      if (type === 'range') {
+        const [, , , min, max, step, fmt, vis] = spec;
+        const id = 'in-' + key;
+        row.innerHTML = `<label class="lab" for="${id}"><span>${label}</span><output id="out-${key}"></output></label>
+          <input type="range" id="${id}" min="${min}" max="${max}" step="${step}">`;
+        const input = row.querySelector('input'), out = row.querySelector('output');
+        input.addEventListener('input', () => set(key, parseFloat(input.value)));
+        row.querySelector('.lab').addEventListener('dblclick', () => set(key, DEFAULTS[key]));
+        rows.push({ el: row, vis, sync: () => { input.value = R[key]; out.textContent = fmt(R[key]); } });
+      } else {
+        const [, , , opts, vis] = spec;
+        row.innerHTML = `<div class="lab"><span>${label}</span></div><div class="segs" role="group" aria-label="${label}"></div>`;
+        const box = row.querySelector('.segs');
+        const btns = opts.map(([v, t]) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.textContent = t; b.id = `seg-${key}-${v}`;
+          b.addEventListener('click', () => set(key, v));
+          box.appendChild(b);
+          return [v, b];
+        });
+        rows.push({ el: row, vis, sync: () => btns.forEach(([v, b]) => b.setAttribute('aria-pressed', String(String(v) === String(R[key])))) });
+      }
+      host.appendChild(row);
+    }
+  }
+}
+
+function buildSims() {
+  const box = $('sims');
+  $('simCount').textContent = SIMS.length + ' sim';
+  for (const s of SIMS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sim'; b.id = 'sim-' + s.id; b.dataset.id = s.id;
+    b.innerHTML = `<i style="background:${s.sw}"></i><span>${s.name}</span>`;
+    b.addEventListener('click', () => set('sim', s.id));
+    box.appendChild(b);
+  }
+}
+
+function buildPresets() {
+  const box = $('presets');
+  PRESETS.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'preset'; b.id = 'preset-' + i;
+    b.innerHTML = `<b></b><span></span>`;
+    b.querySelector('b').textContent = p.name;
+    b.querySelector('span').textContent = SIM[p.sim].name + (p.filter && p.filter !== 'std' ? FILTER_SUFFIX[p.filter] : '') + ' · DR' + p.dr;
+    b.addEventListener('click', () => applyRecipe(p, i));
+    box.appendChild(b);
+  });
+}
+
+function applyRecipe(p, presetIndex = -1) {
+  R = { ...DEFAULTS, ...p };
+  activePreset = presetIndex;
+  $('recipeName').value = R.name;
+  syncUI(); schedule();
+}
+
+function set(key, v) {
+  R[key] = v;
+  activePreset = -1;
+  syncUI(); schedule();
+}
+
+function syncUI() {
+  const s = SIM[R.sim];
+  const show = {
+    color: !s.mono, mono: !!s.mono, filter: !!s.filters,
+    kelvin: R.wbMode === 'k', grain: R.grain > 0,
+  };
+  for (const r of rows) { r.el.hidden = r.vis ? !show[r.vis] : false; r.sync(); }
+  document.querySelectorAll('.sim').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === R.sim)));
+  document.querySelectorAll('#presets .preset').forEach((b, i) => b.setAttribute('aria-pressed', String(i === activePreset)));
+  $('tagR').textContent = simLabel();
+  $('card').textContent = cardText();
+  const wb = R.wbMode === 'k' ? R.k + 'K' : 'AWB';
+  $('edge').innerHTML = '';
+  [simLabel(), 'DR' + R.dr, wb + ' R' + sgn(R.wbR) + ' B' + sgn(R.wbB), fmtEV(R.ev) + ' EV']
+    .forEach(t => { const sp = document.createElement('span'); sp.textContent = t; $('edge').appendChild(sp); });
+}
+
+function simLabel() {
+  const s = SIM[R.sim];
+  return s.card + (s.filters ? FILTER_SUFFIX[R.filter] : '');
+}
+
+function cardText() {
+  const s = SIM[R.sim];
+  const L = [($('recipeName').value || 'Recipe').trim()];
+  L.push('Film Simulation: ' + simLabel());
+  L.push('Dynamic Range: DR' + R.dr);
+  L.push('Grain Effect: ' + (R.grain ? LEVEL[R.grain] + ', ' + (R.grainSize === 'L' ? 'Large' : 'Small') : 'Off'));
+  if (!s.mono) {
+    L.push('Color Chrome Effect: ' + LEVEL[R.cc]);
+    L.push('Color Chrome FX Blue: ' + LEVEL[R.fxb]);
+  }
+  L.push('White Balance: ' + (R.wbMode === 'k' ? R.k + 'K' : 'Auto') + ', ' + sgn(R.wbR) + ' Red & ' + sgn(R.wbB) + ' Blue');
+  L.push('Highlight: ' + sgn(R.hl));
+  L.push('Shadow: ' + sgn(R.sh));
+  if (s.mono) L.push('Monochromatic Color: WC ' + sgn(R.wc) + ', MG ' + sgn(R.mg));
+  else L.push('Color: ' + sgn(R.color));
+  L.push('Sharpness: ' + sgn(R.sharp));
+  L.push('Clarity: ' + sgn(R.clarity));
+  L.push('Exposure Compensation: ' + fmtEV(R.ev));
+  return L.join('\n');
+}
+
+/* ---------- WebGL ---------- */
+const canvas = $('gl');
+const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, premultipliedAlpha: false, antialias: false });
+
+const VS = `attribute vec2 aPos; varying vec2 vUv;
+void main(){ vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+const FS = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D uTex;
+uniform vec2 uTexel;
+uniform float uSplit;
+uniform float uExpo;
+uniform vec3 uWB;
+uniform float uDRW;
+uniform float uCon, uHL, uSH, uGam, uLift;
+uniform float uSat;
+uniform float uHue[6];
+uniform float uSatS[6];
+uniform float uLumS[6];
+uniform vec3 uTintS, uTintH;
+uniform float uCC, uFXB;
+uniform float uMono;
+uniform vec3 uMix;
+uniform vec3 uTone;
+uniform float uSharpK, uClarK, uClarR;
+uniform float uGrain, uGrainCell;
+
+const vec3 LW = vec3(0.2126, 0.7152, 0.0722);
+
+float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float vnoise(vec2 p){
+  vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i), b = hash(i + vec2(1.0, 0.0)), c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+vec3 rgb2hsv(vec3 c){
+  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+  float d = q.x - min(q.w, q.y); float e = 1.0e-10;
+  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+vec3 hsv2rgb(vec3 c){
+  vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+float curve(float x){
+  x = clamp(x, 0.0, 1.0);
+  float bs = 6.75 * x * (1.0 - x) * (1.0 - x);
+  float bh = 6.75 * x * x * (1.0 - x);
+  float y = x + 0.12 * uCon * (bh - bs) - 0.04 * uSH * bs + 0.04 * uHL * bh;
+  y = pow(clamp(y, 0.0, 1.0), uGam);
+  return uLift + (1.0 - uLift) * y;
+}
+vec3 curve3(vec3 c){ return vec3(curve(c.r), curve(c.g), curve(c.b)); }
+float lumAt(vec2 o){ return dot(texture2D(uTex, vUv + o).rgb, LW); }
+
+void main(){
+  vec3 c = texture2D(uTex, vUv).rgb;
+  if (vUv.x < uSplit) { gl_FragColor = vec4(c, 1.0); return; }
+
+  // local detail measured on the source: small ring for sharpness, wide rings for clarity
+  float lc = dot(c, LW);
+  float ls = lc, ll = lc;
+  if (uSharpK != 0.0) {
+    vec2 t = uTexel;
+    ls = (lumAt(vec2(t.x, 0.0)) + lumAt(vec2(-t.x, 0.0)) + lumAt(vec2(0.0, t.y)) + lumAt(vec2(0.0, -t.y))) * 0.15
+       + (lumAt(t) + lumAt(-t) + lumAt(vec2(t.x, -t.y)) + lumAt(vec2(-t.x, t.y))) * 0.1;
+  }
+  if (uClarK != 0.0) {
+    float acc = 0.0;
+    for (int i = 0; i < 8; i++) {
+      float a = float(i) * 0.7853982;
+      vec2 d = vec2(cos(a), sin(a)) * uTexel * uClarR;
+      vec2 d2 = vec2(cos(a + 0.3927), sin(a + 0.3927)) * uTexel * uClarR;
+      acc += lumAt(d) + lumAt(d2 * 0.55) + lumAt(d * 0.25);
+    }
+    ll = acc / 24.0;
+  }
+
+  // linear light: exposure, white balance, dynamic-range shoulder
+  vec3 lin = pow(c, vec3(2.2)) * uExpo * uWB;
+  if (uDRW > 0.0) {
+    float l = dot(lin, LW);
+    if (l > 0.25) { float nl = 0.25 + (l - 0.25) / (1.0 + (l - 0.25) / uDRW); lin *= nl / l; }
+  }
+  vec3 g = pow(clamp(lin, 0.0, 1.0), vec3(1.0 / 2.2));
+
+  // monochrome branch
+  float m = curve(clamp(dot(g, uMix), 0.0, 1.0));
+  float mk = smoothstep(0.0, 0.3, m) * (1.0 - 0.6 * smoothstep(0.7, 1.0, m));
+  vec3 mono = clamp(vec3(m) + uTone * mk, 0.0, 1.0);
+
+  // colour branch
+  vec3 col = curve3(g);
+  vec3 hsv = rgb2hsv(col);
+  float hd = hsv.x * 360.0;
+  float hs = 0.0, ss = 0.0, vs = 0.0, wb = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float d = abs(mod(hd - float(i) * 60.0 + 180.0, 360.0) - 180.0);
+    float w = max(0.0, 1.0 - d / 60.0);
+    hs += w * uHue[i]; ss += w * uSatS[i]; vs += w * uLumS[i];
+    if (i == 3) wb += 0.5 * w;
+    if (i == 4) wb += w;
+  }
+  float sw = smoothstep(0.05, 0.4, hsv.y);
+  hsv.x = fract(hsv.x + hs * sw / 360.0 + 1.0);
+  hsv.y = clamp(hsv.y * mix(1.0, ss, sw), 0.0, 1.0);
+  hsv.z *= mix(1.0, vs, sw);
+  float cm = smoothstep(0.3, 0.9, hsv.y);
+  hsv.z *= 1.0 - uCC * 0.09 * cm * smoothstep(0.15, 0.6, hsv.z);
+  hsv.y = min(1.0, hsv.y * (1.0 + uCC * 0.035 * cm));
+  hsv.z *= 1.0 - uFXB * 0.12 * wb * smoothstep(0.2, 0.6, hsv.y);
+  col = hsv2rgb(hsv);
+  float lum = dot(col, LW);
+  col = mix(vec3(lum), col, uSat);
+  col += uTintS * (1.0 - lum) * (1.0 - lum) + uTintH * lum * lum;
+  vec3 outc = mix(clamp(col, 0.0, 1.0), mono, uMono);
+
+  // sharpness / clarity
+  float l2 = dot(outc, LW);
+  float mid = smoothstep(0.02, 0.3, l2) * (1.0 - smoothstep(0.75, 1.0, l2));
+  outc += (lc - ls) * uSharpK + (lc - ll) * uClarK * mid;
+
+  // grain: two octaves of value noise, strongest in the midtones
+  if (uGrain > 0.0) {
+    vec2 fc = gl_FragCoord.xy / uGrainCell;
+    float n = vnoise(fc) + vnoise(fc * 1.73 + 31.7) - 1.0;
+    outc += n * uGrain * (0.25 + 3.0 * l2 * (1.0 - l2));
+  }
+  gl_FragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);
+}`;
+
+let prog, U = {}, tex = null, texW = 0, texH = 0, maxTex = 4096;
+let source = null, srcW = 0, srcH = 0;
+let split = 0.5;
+
+function initGL() {
+  if (!gl) return false;
+  const sh = (type, src) => {
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  for (const n of ['uTex', 'uTexel', 'uSplit', 'uExpo', 'uWB', 'uDRW', 'uCon', 'uHL', 'uSH', 'uGam', 'uLift', 'uSat',
+    'uHue[0]', 'uSatS[0]', 'uLumS[0]', 'uTintS', 'uTintH', 'uCC', 'uFXB', 'uMono', 'uMix', 'uTone',
+    'uSharpK', 'uClarK', 'uClarR', 'uGrain', 'uGrainCell']) U[n.replace('[0]', '')] = gl.getUniformLocation(prog, n);
+  maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), 8192);
+  return true;
+}
+
+function uploadTexture(el) {
+  if (tex) gl.deleteTexture(tex);
+  tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, el);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  texW = el.width; texH = el.height;
+}
+
+function scaled(el, w, h, maxSide) {
+  const s = Math.min(1, maxSide / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+  const x = c.getContext('2d');
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(el, 0, 0, c.width, c.height);
+  return c;
+}
+
+/* Kelvin → RGB (Tanner Helland fit); camera WB set to K neutralises a K-coloured light */
+function k2rgb(k) {
+  const t = k / 100;
+  const r = t <= 66 ? 255 : 329.698727446 * Math.pow(t - 60, -0.1332047592);
+  const g = t <= 66 ? 99.4708025861 * Math.log(t) - 161.1195681661 : 288.1221695283 * Math.pow(t - 60, -0.0755148492);
+  const b = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+  return [r, g, b].map(v => Math.min(255, Math.max(1, v)) / 255).map(v => Math.pow(v, 2.2));
+}
+function wbMul() {
+  let m = [1, 1, 1];
+  if (R.wbMode === 'k') {
+    const ref = k2rgb(5500), cur = k2rgb(R.k);
+    m = ref.map((v, i) => v / cur[i]);
+  }
+  m[0] *= 1 + 0.025 * R.wbR;
+  m[2] *= 1 + 0.025 * R.wbB;
+  const l = 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
+  return m.map(v => v / l);
+}
+
+function render(splitPos = split) {
+  if (!tex) return;
+  const s = SIM[R.sim];
+  const W = canvas.width, H = canvas.height, longSide = Math.max(W, H);
+  gl.viewport(0, 0, W, H);
+  gl.uniform1i(U.uTex, 0);
+  gl.uniform2f(U.uTexel, 1 / texW, 1 / texH);
+  gl.uniform1f(U.uSplit, splitPos);
+  gl.uniform1f(U.uExpo, Math.pow(2, R.ev / 3));
+  gl.uniform3fv(U.uWB, wbMul());
+  const t = { 100: 0, 200: 0.9, 400: 0.8 }[R.dr];
+  gl.uniform1f(U.uDRW, t ? (0.75 * (t - 0.25)) / (1 - t) : 0);
+  gl.uniform1f(U.uCon, s.con);
+  gl.uniform1f(U.uHL, s.hl + R.hl);
+  gl.uniform1f(U.uSH, s.sh + R.sh);
+  gl.uniform1f(U.uGam, s.gam);
+  gl.uniform1f(U.uLift, s.lift);
+  gl.uniform1f(U.uMono, s.mono ? 1 : 0);
+  if (s.mono) {
+    gl.uniform1f(U.uSat, 1);
+    gl.uniform1fv(U.uHue, [0, 0, 0, 0, 0, 0]);
+    gl.uniform1fv(U.uSatS, [1, 1, 1, 1, 1, 1]);
+    gl.uniform1fv(U.uLumS, [1, 1, 1, 1, 1, 1]);
+    gl.uniform3f(U.uTintS, 0, 0, 0); gl.uniform3f(U.uTintH, 0, 0, 0);
+    gl.uniform1f(U.uCC, 0); gl.uniform1f(U.uFXB, 0);
+  } else {
+    gl.uniform1f(U.uSat, s.sat * (1 + 0.1 * R.color));
+    gl.uniform1fv(U.uHue, s.hue);
+    gl.uniform1fv(U.uSatS, s.satS);
+    gl.uniform1fv(U.uLumS, s.lumS);
+    gl.uniform3fv(U.uTintS, s.tS); gl.uniform3fv(U.uTintH, s.tH);
+    gl.uniform1f(U.uCC, R.cc); gl.uniform1f(U.uFXB, R.fxb);
+  }
+  gl.uniform3fv(U.uMix, FILTERS[s.filters ? R.filter : 'std']);
+  const tb = s.toneBase || [0, 0, 0], k = 0.008;
+  gl.uniform3f(U.uTone, tb[0] + k * R.wc + 0.5 * k * R.mg, tb[1] - k * R.mg, tb[2] - k * R.wc + 0.5 * k * R.mg);
+  gl.uniform1f(U.uSharpK, R.sharp > 0 ? R.sharp * 0.45 : R.sharp * 0.2);
+  gl.uniform1f(U.uClarK, R.clarity * 0.1);
+  gl.uniform1f(U.uClarR, Math.max(texW, texH) * 0.01);
+  const grain = [0, 0.045, 0.085][R.grain] + (s.grainBase || 0);
+  gl.uniform1f(U.uGrain, grain);
+  gl.uniform1f(U.uGrainCell, Math.max(0.8, (longSide / 1800) * (R.grainSize === 'L' ? 2.0 : 1.1)));
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+let raf = 0;
+function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
+
+/* ---------- viewport & split ---------- */
+const stage = $('stage'), frame = $('frame');
+function layout() {
+  if (!srcW) return;
+  const r = stage.getBoundingClientRect();
+  const pad = 24, bottom = 30;
+  const s = Math.min((r.width - pad * 2) / srcW, (r.height - pad - bottom - 8) / srcH);
+  frame.style.width = Math.max(40, Math.floor(srcW * s)) + 'px';
+  frame.style.height = Math.max(40, Math.floor(srcH * s)) + 'px';
+}
+new ResizeObserver(layout).observe(stage);
+
+function setSplit(v) {
+  split = Math.min(1, Math.max(0, v));
+  $('split').style.left = (split * 100) + '%';
+  $('tagL').hidden = split < 0.08;
+  $('tagR').hidden = split > 0.92;
+  schedule();
+}
+let dragging = false;
+frame.addEventListener('pointerdown', e => {
+  dragging = true; frame.setPointerCapture(e.pointerId);
+  const r = frame.getBoundingClientRect(); setSplit((e.clientX - r.left) / r.width);
+});
+frame.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const r = frame.getBoundingClientRect(); setSplit((e.clientX - r.left) / r.width);
+});
+frame.addEventListener('pointerup', () => { dragging = false; });
+frame.addEventListener('pointercancel', () => { dragging = false; });
+$('knob').addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') { setSplit(split - 0.05); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { setSplit(split + 0.05); e.preventDefault(); }
+});
+$('knob').addEventListener('dblclick', () => setSplit(0.5));
+
+/* ---------- image loading ---------- */
+function setSource(el, w, h) {
+  source = el; srcW = w; srcH = h;
+  const prev = scaled(el, w, h, Math.min(2048, maxTex));
+  uploadTexture(prev);
+  canvas.width = prev.width; canvas.height = prev.height;
+  layout(); schedule();
+}
+
+function loadFile(file) {
+  if (!file || !file.type.startsWith('image/')) { toast('Tệp này không phải ảnh.'); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { setSource(img, img.naturalWidth, img.naturalHeight); toast('Đã mở ' + file.name); };
+  img.onerror = () => toast('Trình duyệt không đọc được định dạng này. Thử JPEG hoặc PNG.');
+  img.src = url;
+}
+$('file').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
+let dragDepth = 0;
+stage.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('drop').hidden = false; });
+stage.addEventListener('dragover', e => e.preventDefault());
+stage.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
+stage.addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; $('drop').hidden = true;
+  loadFile(e.dataTransfer.files[0]);
+});
+window.addEventListener('paste', e => {
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (item) loadFile(item.getAsFile());
+});
+
+/* Sample chart: ColorChecker 24 (sRGB), hue × saturation field, skin tones, grey ramps */
+function makeSample() {
+  const W = 1800, H = 1200, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = '#585a58'; x.fillRect(0, 0, W, H);
+  const sky = x.createLinearGradient(0, 0, 0, 300);
+  sky.addColorStop(0, '#3f6fb4'); sky.addColorStop(0.65, '#9cbfe0'); sky.addColorStop(1, '#f1caa0');
+  x.fillStyle = sky; x.fillRect(0, 0, W, 300);
+  const sun = x.createRadialGradient(1380, 250, 10, 1380, 250, 260);
+  sun.addColorStop(0, 'rgba(255,246,220,1)'); sun.addColorStop(0.15, 'rgba(255,214,150,.85)'); sun.addColorStop(1, 'rgba(255,190,120,0)');
+  x.fillStyle = sun; x.fillRect(0, 0, W, 300);
+  x.fillStyle = '#26332b';
+  x.beginPath(); x.moveTo(0, 300);
+  for (let i = 0; i <= W; i += 30) x.lineTo(i, 268 + Math.sin(i / 90) * 14 + Math.sin(i / 37) * 6);
+  x.lineTo(W, 300); x.fill();
+
+  const CC = ['#735244', '#c29682', '#627a9d', '#576c43', '#8580b1', '#67bdaa', '#d67e2c', '#505ba6', '#c15a63', '#5e3c6c', '#9dbc40', '#e0a32e',
+    '#383d96', '#469449', '#af363c', '#e7c71f', '#bb5695', '#0885a1', '#f3f3f2', '#c8c8c8', '#a0a0a0', '#7a7a79', '#555555', '#343434'];
+  const ox = 60, oy = 350, ps = 140, gap = 12;
+  x.fillStyle = '#1b1b1b'; x.fillRect(ox - 16, oy - 16, 6 * (ps + gap) - gap + 32, 4 * (ps + gap) - gap + 32);
+  CC.forEach((col, i) => { x.fillStyle = col; x.fillRect(ox + (i % 6) * (ps + gap), oy + Math.floor(i / 6) * (ps + gap), ps, ps); });
+
+  const hx = 1100, hy = 350, hw = 640, hh = 400;
+  const id = x.createImageData(hw, hh);
+  for (let j = 0; j < hh; j++) for (let i = 0; i < hw; i++) {
+    const h = i / hw * 6, t = j / hh;
+    const s = t < 0.5 ? 1 : 1 - (t - 0.5) * 1.7, v = t < 0.5 ? 0.45 + t * 1.1 : 1;
+    const f = h - Math.floor(h), p = v * (1 - s), q = v * (1 - s * f), u = v * (1 - s * (1 - f));
+    const rgb = [[v, u, p], [q, v, p], [p, v, u], [p, q, v], [u, p, v], [v, p, q]][Math.floor(h) % 6];
+    const o = (j * hw + i) * 4;
+    id.data[o] = rgb[0] * 255; id.data[o + 1] = rgb[1] * 255; id.data[o + 2] = rgb[2] * 255; id.data[o + 3] = 255;
+  }
+  x.putImageData(id, hx, hy);
+
+  const skin = ['#f3d2bf', '#e2b49a', '#c98e6c', '#a46b4c', '#7a4a32', '#4c2c1e'];
+  skin.forEach((col, i) => { x.fillStyle = col; x.beginPath(); x.arc(hx + 52 + i * 107, 860, 46, 0, Math.PI * 2); x.fill(); });
+
+  const gy = 1000, gw = W - 120;
+  const ramp = x.createLinearGradient(60, 0, 60 + gw, 0);
+  ramp.addColorStop(0, '#000'); ramp.addColorStop(1, '#fff');
+  x.fillStyle = ramp; x.fillRect(60, gy, gw, 70);
+  for (let i = 0; i <= 10; i++) { const v = Math.round(i / 10 * 255); x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(60 + i * gw / 11, gy + 76, gw / 11 + 1, 70); }
+
+  x.fillStyle = 'rgba(235,235,235,.75)'; x.font = '500 22px "IBM Plex Mono", monospace';
+  x.fillText('COLORCHECKER 24', ox - 16, oy - 26);
+  x.fillText('HUE × SATURATION', hx, hy - 26);
+  x.fillText('SKIN', hx, 800);
+  x.fillText('GREY 0–100%  ·  11 STEP', 60, gy - 14);
+  return c;
+}
+$('btnSample').addEventListener('click', () => { const c = makeSample(); setSource(c, c.width, c.height); });
+
+/* ---------- export ---------- */
+let lastURL = null;
+$('btnExport').addEventListener('click', () => {
+  if (!source) return;
+  const full = scaled(source, srcW, srcH, Math.min(maxTex, 6144));
+  uploadTexture(full);
+  canvas.width = full.width; canvas.height = full.height;
+  render(-1);
+  canvas.toBlob(blob => {
+    if (!blob) { toast('Không xuất được ảnh. Thử ảnh nhỏ hơn.'); return; }
+    if (lastURL) URL.revokeObjectURL(lastURL);
+    lastURL = URL.createObjectURL(blob);
+    $('expImg').src = lastURL;
+    $('expInfo').textContent = `${full.width}×${full.height} · ${(blob.size / 1048576).toFixed(1)} MB · ${simLabel()}`;
+    $('modal').hidden = false;
+  }, 'image/jpeg', 0.92);
+  const prev = scaled(source, srcW, srcH, Math.min(2048, maxTex));
+  uploadTexture(prev);
+  canvas.width = prev.width; canvas.height = prev.height;
+  render();
+});
+$('btnClose').addEventListener('click', () => { $('modal').hidden = true; });
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) $('modal').hidden = true; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').hidden = true; });
+
+/* ---------- recipe card, copy, saved recipes ---------- */
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+}
+$('recipeName').addEventListener('input', () => { R.name = $('recipeName').value; $('card').textContent = cardText(); });
+$('btnCopy').addEventListener('click', () => {
+  const text = cardText();
+  const fallback = () => {
+    const range = document.createRange(); range.selectNodeContents($('card'));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    toast('Đã chọn sẵn nội dung, nhấn Ctrl/⌘+C để chép.');
+  };
+  try { navigator.clipboard.writeText(text).then(() => toast('Đã chép recipe card.'), fallback); } catch { fallback(); }
+});
+$('btnReset').addEventListener('click', () => applyRecipe({ ...DEFAULTS }));
+
+const STORE = 'filmsimlab.recipes.v1';
+const loadSaved = () => { try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch { return []; } };
+const storeSaved = list => { try { localStorage.setItem(STORE, JSON.stringify(list)); return true; } catch { return false; } };
+function renderSaved() {
+  const list = loadSaved(), box = $('saved');
+  box.innerHTML = '';
+  list.forEach((r, i) => {
+    const item = document.createElement('div'); item.className = 'item';
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'preset';
+    b.innerHTML = '<b></b><span></span>';
+    b.querySelector('b').textContent = r.name;
+    b.querySelector('span').textContent = (SIM[r.sim]?.name || r.sim) + ' · DR' + r.dr;
+    b.addEventListener('click', () => applyRecipe(r));
+    const d = document.createElement('button'); d.type = 'button'; d.className = 'btn ghost del'; d.textContent = '✕';
+    d.setAttribute('aria-label', 'Xoá ' + r.name);
+    d.addEventListener('click', () => { const l = loadSaved(); l.splice(i, 1); storeSaved(l); renderSaved(); });
+    item.append(b, d); box.appendChild(item);
+  });
+  $('savedHint').hidden = list.length > 0;
+}
+$('btnSave').addEventListener('click', () => {
+  const name = ($('recipeName').value || 'Recipe').trim();
+  const list = loadSaved().filter(r => r.name !== name);
+  list.unshift({ ...R, name });
+  toast(storeSaved(list) ? 'Đã lưu "' + name + '".' : 'Trình duyệt chặn lưu trữ, recipe chưa được lưu.');
+  renderSaved();
+});
+
+/* ---------- boot ---------- */
+buildSims(); buildPresets(); buildControls(); renderSaved();
+let ok = false;
+try { ok = initGL(); } catch (err) { console.error(err); }
+if (!ok) {
+  stage.innerHTML = '<p class="glfail">Trình duyệt này không bật được WebGL nên không xử lý ảnh được. Hãy bật tăng tốc phần cứng hoặc thử Chrome/Safari bản mới.</p>';
+} else {
+  applyRecipe(PRESETS[0], 0);
+  const c = makeSample(); setSource(c, c.width, c.height);
+  setSplit(0.5);
+}
+})();
+</script>
