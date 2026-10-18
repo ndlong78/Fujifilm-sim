@@ -123,6 +123,8 @@ aside.panel { background: var(--panel); border-left: 1px solid var(--line); over
 }
 .inline { display: flex; gap: 6px; }
 .inline input[type=text] { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise); }
+.json { width: 100%; resize: vertical; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise);
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; }
 .saved { display: grid; gap: 6px; }
 .saved .item { display: flex; gap: 6px; }
 .saved .item .preset { flex: 1; min-width: 0; }
@@ -196,6 +198,19 @@ aside.panel { background: var(--panel); border-left: 1px solid var(--line); over
       <div class="sec"><h2>Cân bằng trắng</h2><div id="g-wb"></div></div>
       <div class="sec"><h2>Chi tiết &amp; hạt</h2><div id="g-detail"></div></div>
       <div class="sec">
+        <h2>LUT 3D <small id="lutInfo">chưa nạp</small></h2>
+        <div class="inline">
+          <label class="btn" for="lutFile">Nạp file .cube</label>
+          <input id="lutFile" type="file" accept=".cube" hidden>
+          <button class="btn ghost" id="btnLutOff" type="button" hidden>Gỡ LUT</button>
+        </div>
+        <div class="row" id="lutRow" hidden>
+          <label class="lab" for="in-lutMix"><span>Cường độ LUT</span><output id="out-lutMix">100%</output></label>
+          <input type="range" id="in-lutMix" min="0" max="100" step="5" value="100">
+        </div>
+        <p class="hint">LUT áp sau film sim, trước sharpness và grain. Không ghi vào recipe card vì máy Fuji không nạp được LUT.</p>
+      </div>
+      <div class="sec">
         <h2>Recipe card <small>chép lên máy</small></h2>
         <div class="inline">
           <input id="recipeName" type="text" maxlength="40" aria-label="Tên recipe" value="Recipe của tôi">
@@ -207,6 +222,20 @@ aside.panel { background: var(--panel); border-left: 1px solid var(--line); over
         </div>
         <div class="saved" id="saved"></div>
         <p class="hint" id="savedHint">Recipe lưu ở trình duyệt này, máy khác không thấy.</p>
+      </div>
+      <div class="sec">
+        <h2>Đồng bộ JSON <small>giữa các máy</small></h2>
+        <div class="inline">
+          <button class="btn" id="btnJsonCur" type="button">Chép recipe hiện tại</button>
+          <button class="btn" id="btnJsonAll" type="button">Chép tất cả đã lưu</button>
+        </div>
+        <textarea id="jsonIn" class="json" rows="4" spellcheck="false" aria-label="Dán JSON recipe" placeholder='Dán JSON vào đây: một recipe {…} hoặc danh sách [{…}, …]'></textarea>
+        <div class="inline">
+          <button class="btn" id="btnJsonLoad" type="button">Nạp JSON</button>
+          <label class="btn ghost" for="jsonFile">Mở file .json</label>
+          <input id="jsonFile" type="file" accept=".json,application/json" hidden>
+        </div>
+        <p class="hint">Một recipe thì áp ngay; danh sách thì thêm vào mục đã lưu.</p>
       </div>
     </aside>
   </div>
@@ -467,6 +496,10 @@ uniform vec3 uMix;
 uniform vec3 uTone;
 uniform float uSharpK, uClarK, uClarR;
 uniform float uGrain, uGrainCell;
+uniform sampler2D uLut;
+uniform float uLutN, uLutCols, uLutMix;
+uniform vec2 uLutDim;
+uniform vec3 uLutMin, uLutMax;
 
 const vec3 LW = vec3(0.2126, 0.7152, 0.0722);
 
@@ -497,6 +530,16 @@ float curve(float x){
 }
 vec3 curve3(vec3 c){ return vec3(curve(c.r), curve(c.g), curve(c.b)); }
 float lumAt(vec2 o){ return dot(texture2D(uTex, vUv + o).rgb, LW); }
+// 3D LUT packed as a grid of N×N slices (one slice per blue step); trilinear = bilinear tap × 2 slices
+vec3 lutTap(vec2 rg, float slice){
+  vec2 tile = vec2(mod(slice, uLutCols), floor(slice / uLutCols));
+  return texture2D(uLut, (tile * uLutN + rg * (uLutN - 1.0) + 0.5) / uLutDim).rgb;
+}
+vec3 applyLut(vec3 c){
+  c = clamp((c - uLutMin) / (uLutMax - uLutMin), 0.0, 1.0);
+  float b = c.b * (uLutN - 1.0), b0 = floor(b);
+  return mix(lutTap(c.rg, b0), lutTap(c.rg, min(b0 + 1.0, uLutN - 1.0)), b - b0);
+}
 
 void main(){
   vec3 c = texture2D(uTex, vUv).rgb;
@@ -559,6 +602,7 @@ void main(){
   col = mix(vec3(lum), col, uSat);
   col += uTintS * (1.0 - lum) * (1.0 - lum) + uTintH * lum * lum;
   vec3 outc = mix(clamp(col, 0.0, 1.0), mono, uMono);
+  if (uLutMix > 0.0) outc = mix(outc, applyLut(outc), uLutMix);
 
   // sharpness / clarity
   float l2 = dot(outc, LW);
@@ -575,6 +619,7 @@ void main(){
 }`;
 
 let prog, U = {}, tex = null, texW = 0, texH = 0, maxTex = 4096;
+let lut = null, lutTex = null;
 let source = null, srcW = 0, srcH = 0;
 let split = 0.5;
 
@@ -599,7 +644,8 @@ function initGL() {
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   for (const n of ['uTex', 'uTexel', 'uSplit', 'uExpo', 'uWB', 'uDRW', 'uCon', 'uHL', 'uSH', 'uGam', 'uLift', 'uSat',
     'uHue[0]', 'uSatS[0]', 'uLumS[0]', 'uTintS', 'uTintH', 'uCC', 'uFXB', 'uMono', 'uMix', 'uTone',
-    'uSharpK', 'uClarK', 'uClarR', 'uGrain', 'uGrainCell']) U[n.replace('[0]', '')] = gl.getUniformLocation(prog, n);
+    'uSharpK', 'uClarK', 'uClarR', 'uGrain', 'uGrainCell',
+    'uLut', 'uLutN', 'uLutCols', 'uLutMix', 'uLutDim', 'uLutMin', 'uLutMax']) U[n.replace('[0]', '')] = gl.getUniformLocation(prog, n);
   maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), 8192);
   return true;
 }
@@ -607,6 +653,7 @@ function initGL() {
 function uploadTexture(el) {
   if (tex) gl.deleteTexture(tex);
   tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, el);
@@ -689,6 +736,13 @@ function render(splitPos = split) {
   const grain = [0, 0.045, 0.085][R.grain] + (s.grainBase || 0);
   gl.uniform1f(U.uGrain, grain);
   gl.uniform1f(U.uGrainCell, Math.max(0.8, (longSide / 1800) * (R.grainSize === 'L' ? 2.0 : 1.1)));
+  gl.uniform1i(U.uLut, 1);
+  gl.uniform1f(U.uLutMix, lut ? lut.mix : 0);
+  if (lut) {
+    gl.uniform1f(U.uLutN, lut.n); gl.uniform1f(U.uLutCols, lut.cols);
+    gl.uniform2f(U.uLutDim, lut.w, lut.h);
+    gl.uniform3fv(U.uLutMin, lut.min); gl.uniform3fv(U.uLutMax, lut.max);
+  }
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 
@@ -847,15 +901,14 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
 }
 $('recipeName').addEventListener('input', () => { R.name = $('recipeName').value; $('card').textContent = cardText(); });
-$('btnCopy').addEventListener('click', () => {
-  const text = cardText();
-  const fallback = () => {
-    const range = document.createRange(); range.selectNodeContents($('card'));
-    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
-    toast('Đã chọn sẵn nội dung, nhấn Ctrl/⌘+C để chép.');
-  };
-  try { navigator.clipboard.writeText(text).then(() => toast('Đã chép recipe card.'), fallback); } catch { fallback(); }
-});
+function copyText(text, okMsg, fallback) {
+  const fail = () => { fallback(); toast('Đã chọn sẵn nội dung, nhấn Ctrl/⌘+C để chép.'); };
+  try { navigator.clipboard.writeText(text).then(() => toast(okMsg), fail); } catch { fail(); }
+}
+$('btnCopy').addEventListener('click', () => copyText(cardText(), 'Đã chép recipe card.', () => {
+  const range = document.createRange(); range.selectNodeContents($('card'));
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+}));
 $('btnReset').addEventListener('click', () => applyRecipe({ ...DEFAULTS }));
 
 const STORE = 'filmsimlab.recipes.v1';
@@ -870,7 +923,7 @@ function renderSaved() {
     b.innerHTML = '<b></b><span></span>';
     b.querySelector('b').textContent = r.name;
     b.querySelector('span').textContent = (SIM[r.sim]?.name || r.sim) + ' · DR' + r.dr;
-    b.addEventListener('click', () => applyRecipe(r));
+    b.addEventListener('click', () => applyRecipe(sanitize(r) || DEFAULTS));
     const d = document.createElement('button'); d.type = 'button'; d.className = 'btn ghost del'; d.textContent = '✕';
     d.setAttribute('aria-label', 'Xoá ' + r.name);
     d.addEventListener('click', () => { const l = loadSaved(); l.splice(i, 1); storeSaved(l); renderSaved(); });
@@ -885,6 +938,127 @@ $('btnSave').addEventListener('click', () => {
   toast(storeSaved(list) ? 'Đã lưu "' + name + '".' : 'Trình duyệt chặn lưu trữ, recipe chưa được lưu.');
   renderSaved();
 });
+
+/* ---------- recipe JSON import / export ---------- */
+// valid values per key, taken from the control specs so JSON can never push a slider out of range
+const LIMITS = {};
+for (const list of Object.values(CONTROLS)) for (const spec of list) {
+  if (spec[0] === 'range') LIMITS[spec[1]] = { min: spec[3], max: spec[4], step: spec[5] };
+  else LIMITS[spec[1]] = { opts: spec[3].map(o => o[0]) };
+}
+function sanitize(o) {
+  if (!o || typeof o !== 'object' || !SIM[o.sim]) return null;
+  const r = { ...DEFAULTS, sim: o.sim, name: String(o.name ?? DEFAULTS.name).slice(0, 40) };
+  for (const [k, lim] of Object.entries(LIMITS)) {
+    if (!(k in o)) continue;
+    if (lim.opts) { const hit = lim.opts.find(v => String(v) === String(o[k])); if (hit !== undefined) r[k] = hit; }
+    else if (Number.isFinite(+o[k])) {
+      const v = Math.min(lim.max, Math.max(lim.min, +o[k]));
+      r[k] = +(lim.min + Math.round((v - lim.min) / lim.step) * lim.step).toFixed(2);
+    }
+  }
+  return r;
+}
+function importJson(text) {
+  let data;
+  try { data = JSON.parse(text); } catch (e) { toast('JSON không hợp lệ: ' + e.message); return; }
+  if (Array.isArray(data)) {
+    const ok = data.map(sanitize).filter(Boolean);
+    if (!ok.length) { toast('Không có recipe hợp lệ nào (cần trường "sim" đúng mã).'); return; }
+    const names = new Set(ok.map(r => r.name));
+    const merged = [...ok, ...loadSaved().filter(r => !names.has(r.name))];
+    const skipped = data.length - ok.length;
+    toast(storeSaved(merged)
+      ? `Đã thêm ${ok.length} recipe` + (skipped ? `, bỏ qua ${skipped} mục lỗi.` : '.')
+      : 'Trình duyệt chặn lưu trữ, chưa thêm được.');
+    renderSaved();
+  } else {
+    const r = sanitize(data);
+    if (!r) { toast('Recipe thiếu trường "sim" hợp lệ (vd. "cn", "acros").'); return; }
+    applyRecipe(r); toast('Đã áp "' + r.name + '".');
+  }
+}
+const selectJson = text => () => { const t = $('jsonIn'); t.value = text; t.focus(); t.select(); };
+$('btnJsonCur').addEventListener('click', () => {
+  const text = JSON.stringify({ ...R, name: ($('recipeName').value || 'Recipe').trim() }, null, 2);
+  copyText(text, 'Đã chép JSON recipe hiện tại.', selectJson(text));
+});
+$('btnJsonAll').addEventListener('click', () => {
+  const list = loadSaved();
+  if (!list.length) { toast('Chưa có recipe nào được lưu.'); return; }
+  const text = JSON.stringify(list, null, 2);
+  copyText(text, `Đã chép ${list.length} recipe.`, selectJson(text));
+});
+$('btnJsonLoad').addEventListener('click', () => importJson($('jsonIn').value));
+$('jsonFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  const text = await f.text(); $('jsonIn').value = text; importJson(text);
+});
+
+/* ---------- 3D LUT (.cube) ---------- */
+function parseCube(text) {
+  let n = 0, min = [0, 0, 0], max = [1, 1, 1];
+  const vals = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line[0] === '#') continue;
+    const p = line.split(/\s+/), key = p[0].toUpperCase();
+    if (key === 'LUT_1D_SIZE') throw new Error('Đây là LUT 1D, trang chỉ hỗ trợ LUT 3D.');
+    if (key === 'LUT_3D_SIZE') { n = parseInt(p[1], 10); continue; }
+    if (key === 'DOMAIN_MIN') { min = p.slice(1, 4).map(Number); continue; }
+    if (key === 'DOMAIN_MAX') { max = p.slice(1, 4).map(Number); continue; }
+    if (/^[A-Z_]/.test(key)) continue;   // TITLE, LUT_3D_INPUT_RANGE…
+    vals.push(+p[0], +p[1], +p[2]);
+  }
+  if (!(n >= 2 && n <= 129)) throw new Error('Thiếu hoặc sai LUT_3D_SIZE.');
+  if (vals.length !== n * n * n * 3) throw new Error(`Cần ${n ** 3} dòng màu, file có ${vals.length / 3}.`);
+  if (vals.some(v => !Number.isFinite(v)) || [...min, ...max].some(v => !Number.isFinite(v)) || max.some((v, i) => v <= min[i]))
+    throw new Error('File có giá trị không đọc được.');
+  return { n, min, max, vals };
+}
+function setLut(c, name) {
+  const n = c.n, cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
+  const w = cols * n, h = rows * n;
+  if (Math.max(w, h) > maxTex) throw new Error('LUT quá lớn cho GPU này.');
+  // .cube order: red fastest, then green, then blue → blue picks the tile, red/green address inside it
+  const data = new Uint8Array(w * h * 4);
+  for (let b = 0; b < n; b++) {
+    const tx = (b % cols) * n, ty = Math.floor(b / cols) * n;
+    for (let g = 0; g < n; g++) for (let r = 0; r < n; r++) {
+      const i = (r + g * n + b * n * n) * 3, o = ((ty + g) * w + tx + r) * 4;
+      for (let k = 0; k < 3; k++) data[o + k] = Math.round(Math.min(1, Math.max(0, c.vals[i + k])) * 255);
+      data[o + 3] = 255;
+    }
+  }
+  if (!lutTex) lutTex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, lutTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.activeTexture(gl.TEXTURE0);
+  lut = { n, cols, w, h, min: c.min, max: c.max, mix: +$('in-lutMix').value / 100, name };
+}
+function syncLutUI() {
+  $('lutInfo').textContent = lut ? `${lut.name} · ${lut.n}³` : 'chưa nạp';
+  $('lutRow').hidden = $('btnLutOff').hidden = !lut;
+  $('out-lutMix').textContent = $('in-lutMix').value + '%';
+}
+$('lutFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f || !gl) return;
+  try {
+    setLut(parseCube(await f.text()), f.name.replace(/\.cube$/i, '').slice(0, 28));
+    toast('Đã nạp LUT ' + f.name);
+  } catch (err) { toast('Không nạp được LUT: ' + err.message); }
+  syncLutUI(); schedule();
+});
+$('btnLutOff').addEventListener('click', () => { lut = null; syncLutUI(); schedule(); });
+$('in-lutMix').addEventListener('input', () => { if (lut) lut.mix = +$('in-lutMix').value / 100; syncLutUI(); schedule(); });
 
 /* ---------- boot ---------- */
 buildSims(); buildPresets(); buildControls(); renderSaved();
