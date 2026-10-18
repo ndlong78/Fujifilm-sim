@@ -264,39 +264,47 @@ aside.panel { background: var(--panel); border-left: 1px solid var(--line); over
 'use strict';
 
 /* ---------- Film simulation parameter table ----------
-   Sectors: R(0°) Y(60°) G(120°) C(180°) B(240°) M(300°)
-   hue: shift in degrees · satS/lumS: per-sector multipliers
+   Sectors (OKLCh hue): R 29° · Y 110° · G 143° · C 195° · B 264° · M 328°; values blend smoothly between centres.
+   hue: shift in degrees (+ = toward the next sector in R→Y→G→C→B→M order) · satS/lumS: chroma / lightness multipliers
    con: S-curve strength · hl/sh: built-in tone offset · gam: midtone gamma · lift: black lift
-   tS/tH: additive split-tone for shadows / highlights (sRGB) */
+   tS/tH: OKLab [a, b] tint for shadows / highlights (+a magenta, +b yellow)
+   Values are hand-tuned against Fujifilm's published descriptions; tools/calibrate.py refits them from real camera pairs. */
 const SIMS = [
   { id: 'provia', name: 'Provia', card: 'Provia/Standard', sw: '#2f8a52', sat: 1.0, con: 0.15, hl: 0, sh: 0, gam: 1, lift: 0,
-    hue: [0, 0, 0, 0, 0, 0], satS: [1.04, 1, 1.02, 1, 1.03, 1], lumS: [1, 1, 1, 1, 1, 1], tS: [0, 0, 0], tH: [0, 0, 0] },
-  { id: 'velvia', name: 'Velvia', card: 'Velvia/Vivid', sw: '#b0306a', sat: 1.32, con: 0.4, hl: 0.5, sh: 0.5, gam: 1.03, lift: 0,
-    hue: [-3, -5, 6, 0, 6, -4], satS: [1.15, 1.08, 1.15, 1.1, 1.18, 1.1], lumS: [0.95, 1, 0.92, 0.95, 0.86, 0.95], tS: [0, 0, 0.004], tH: [0, 0, 0] },
+    hue: [0, 0, 0, 0, 0, 0], satS: [1.04, 1, 1.02, 1, 1.03, 1], lumS: [1, 1, 1, 1, 1, 1], tS: [0, 0], tH: [0, 0] },
+  { id: 'velvia', name: 'Velvia', card: 'Velvia/Vivid', sw: '#b0306a', sat: 1.3, con: 0.4, hl: 0.5, sh: 0.5, gam: 1.03, lift: 0,
+    hue: [-3, -5, 6, 0, 6, -4], satS: [1.15, 1.08, 1.15, 1.1, 1.18, 1.1], lumS: [0.95, 1, 0.92, 0.95, 0.86, 0.95], tS: [0, -0.003], tH: [0, 0] },
   { id: 'astia', name: 'Astia', card: 'Astia/Soft', sw: '#d8b237', sat: 1.04, con: 0.05, hl: -0.5, sh: -0.5, gam: 0.98, lift: 0.004,
-    hue: [3, 0, 0, 0, 0, 0], satS: [0.95, 1.0, 1.05, 1.05, 1.1, 0.95], lumS: [1.03, 1.03, 1, 1, 0.98, 1], tS: [0, 0, 0], tH: [0.006, 0.003, 0] },
-  { id: 'cc', name: 'Classic Chrome', card: 'Classic Chrome', sw: '#7c7766', sat: 0.8, con: 0.25, hl: -0.5, sh: 0.75, gam: 1.02, lift: 0.012,
-    hue: [-2, -6, -8, 0, -6, 0], satS: [0.96, 0.8, 0.74, 0.9, 0.86, 0.8], lumS: [0.95, 1, 0.95, 0.95, 0.86, 1], tS: [-0.008, 0.002, 0.01], tH: [0.008, 0.004, -0.006] },
+    hue: [3, 0, 0, 0, 0, 0], satS: [0.95, 1.0, 1.05, 1.05, 1.1, 0.95], lumS: [1.03, 1.03, 1, 1, 0.98, 1], tS: [0, 0], tH: [0.002, 0.004] },
+  // Fujifilm: low saturation, full-bodied tones; reds and greens reined in, magenta pulled out of skies (blue → cyan).
+  // Shadows carry the contrast, highlights stay close to Provia; blues keep most of their chroma.
+  { id: 'cc', name: 'Classic Chrome', card: 'Classic Chrome', sw: '#7c7766', sat: 0.82, con: 0.25, hl: 0, sh: 1.25, gam: 1.02, lift: 0.012,
+    hue: [-2, -6, -8, 0, -8, -4], satS: [0.9, 0.8, 0.74, 0.92, 0.95, 0.78], lumS: [0.95, 1, 0.95, 0.95, 0.88, 1], tS: [-0.004, -0.006], tH: [0.002, 0.007] },
   { id: 'pnh', name: 'Pro Neg Hi', card: 'Pro Neg. Hi', sw: '#2f5f9e', sat: 0.94, con: 0.2, hl: 0, sh: 0.5, gam: 1, lift: 0.004,
-    hue: [2, -2, 0, 0, 0, 0], satS: [0.98, 0.92, 0.9, 0.95, 0.95, 0.92], lumS: [1.02, 1.01, 0.98, 1, 0.97, 1], tS: [0, 0, 0.004], tH: [0.004, 0.002, 0] },
+    hue: [2, -2, 0, 0, 0, 0], satS: [0.98, 0.92, 0.9, 0.95, 0.95, 0.92], lumS: [1.02, 1.01, 0.98, 1, 0.97, 1], tS: [0, -0.003], tH: [0.001, 0.003] },
   { id: 'pns', name: 'Pro Neg Std', card: 'Pro Neg. Std', sw: '#5c86b8', sat: 0.86, con: -0.05, hl: -0.5, sh: -0.5, gam: 0.99, lift: 0.008,
-    hue: [2, -2, 2, 0, 0, 0], satS: [0.95, 0.88, 0.86, 0.92, 0.92, 0.9], lumS: [1.02, 1.01, 0.98, 1, 0.98, 1], tS: [0, 0.002, 0.004], tH: [0.003, 0.002, 0] },
-  { id: 'cn', name: 'Classic Neg', card: 'Classic Negative', sw: '#2e8b88', sat: 0.86, con: 0.35, hl: -0.5, sh: 1, gam: 1.03, lift: 0.02,
-    hue: [-6, -10, 12, 0, -8, 0], satS: [1.05, 0.85, 0.8, 1, 0.9, 0.85], lumS: [0.95, 1, 0.9, 0.95, 0.9, 1], tS: [-0.012, 0.008, 0.012], tH: [0.014, 0.002, -0.009] },
+    hue: [2, -2, 2, 0, 0, 0], satS: [0.95, 0.88, 0.86, 0.92, 0.92, 0.9], lumS: [1.02, 1.01, 0.98, 1, 0.98, 1], tS: [-0.001, -0.003], tH: [0.001, 0.002] },
+  // More saturated than Classic Chrome, but cool colours and yellows lose more chroma than reds/oranges → warm bias.
+  // Contrast is concentrated in the highlights; shadows lean teal, highlights warm.
+  { id: 'cn', name: 'Classic Neg', card: 'Classic Negative', sw: '#2e8b88', sat: 0.95, con: 0.3, hl: 1, sh: 0.5, gam: 1.03, lift: 0.02,
+    hue: [-6, -10, 12, 0, -8, 0], satS: [1.1, 0.8, 0.75, 0.8, 0.8, 0.85], lumS: [0.95, 1, 0.9, 0.95, 0.9, 1], tS: [-0.008, -0.004], tH: [0.006, 0.01] },
   { id: 'nn', name: 'Nostalgic Neg', card: 'Nostalgic Neg.', sw: '#c9822c', sat: 0.95, con: 0.15, hl: -0.5, sh: 0.5, gam: 1.01, lift: 0.015,
-    hue: [4, -6, -6, 0, -4, 0], satS: [1.05, 1.1, 0.85, 0.9, 0.85, 0.9], lumS: [1, 1.02, 0.95, 0.97, 0.92, 1], tS: [0.004, 0, -0.004], tH: [0.03, 0.012, -0.025] },
+    hue: [4, -6, -6, 0, -4, 0], satS: [1.05, 1.1, 0.85, 0.9, 0.85, 0.9], lumS: [1, 1.02, 0.95, 0.97, 0.92, 1], tS: [0.002, 0.003], tH: [0.006, 0.022] },
   { id: 'reala', name: 'Reala Ace', card: 'Reala Ace', sw: '#c23b3b', sat: 1.05, con: 0.2, hl: 0, sh: 0.5, gam: 1, lift: 0,
-    hue: [0, -2, 2, 0, 0, 0], satS: [1.03, 1, 1.02, 1, 1.03, 1], lumS: [1, 1, 0.99, 1, 0.98, 1], tS: [0, 0, 0], tH: [0, 0, 0] },
+    hue: [0, -2, 2, 0, 0, 0], satS: [1.03, 1, 1.02, 1, 1.03, 1], lumS: [1, 1, 0.99, 1, 0.98, 1], tS: [0, 0], tH: [0, 0] },
   { id: 'eterna', name: 'Eterna', card: 'Eterna/Cinema', sw: '#25525a', sat: 0.66, con: -0.3, hl: -1, sh: -1, gam: 0.97, lift: 0.03,
-    hue: [0, -4, 6, 0, -4, 0], satS: [0.9, 0.8, 0.85, 0.9, 0.85, 0.8], lumS: [1, 1, 0.97, 1, 0.97, 1], tS: [-0.01, 0.006, 0.012], tH: [0.006, 0.004, -0.002] },
+    hue: [0, -4, 6, 0, -4, 0], satS: [0.9, 0.8, 0.85, 0.9, 0.85, 0.8], lumS: [1, 1, 0.97, 1, 0.97, 1], tS: [-0.007, -0.006], tH: [0.001, 0.004] },
   { id: 'ebb', name: 'Eterna Bleach', card: 'Eterna Bleach Bypass', sw: '#8e9592', sat: 0.42, con: 0.5, hl: 1, sh: 1.5, gam: 1.02, lift: 0,
-    hue: [0, -2, 0, 0, 0, 0], satS: [1, 1, 1, 1, 1, 1], lumS: [1, 1, 1, 1, 1, 1], tS: [-0.004, 0, 0.006], tH: [0.004, 0.003, 0] },
-  { id: 'acros', name: 'Acros', card: 'Acros', sw: '#1c1d1c', mono: true, filters: true, con: 0.28, hl: 0, sh: 0.5, gam: 1.02, lift: 0, grainBase: 0.012, toneBase: [0, 0, 0] },
-  { id: 'mono', name: 'Monochrome', card: 'Monochrome', sw: '#77797a', mono: true, filters: true, con: 0.1, hl: 0, sh: 0, gam: 1, lift: 0, grainBase: 0, toneBase: [0, 0, 0] },
-  { id: 'sepia', name: 'Sepia', card: 'Sepia', sw: '#8a5a32', mono: true, con: 0.05, hl: -0.5, sh: 0, gam: 0.98, lift: 0.01, grainBase: 0, toneBase: [0.075, 0.02, -0.07] },
+    hue: [0, -2, 0, 0, 0, 0], satS: [1, 1, 1, 1, 1, 1], lumS: [1, 1, 1, 1, 1, 1], tS: [-0.001, -0.004], tH: [0, 0.003] },
+  { id: 'acros', name: 'Acros', card: 'Acros', sw: '#1c1d1c', mono: true, filters: true, con: 0.28, hl: 0, sh: 0.5, gam: 1.02, lift: 0, grainBase: 0.012, toneBase: [0, 0] },
+  { id: 'mono', name: 'Monochrome', card: 'Monochrome', sw: '#77797a', mono: true, filters: true, con: 0.1, hl: 0, sh: 0, gam: 1, lift: 0, grainBase: 0, toneBase: [0, 0] },
+  { id: 'sepia', name: 'Sepia', card: 'Sepia', sw: '#8a5a32', mono: true, con: 0.05, hl: -0.5, sh: 0, gam: 0.98, lift: 0.01, grainBase: 0, toneBase: [0.012, 0.042] },
 ];
 const SIM = Object.fromEntries(SIMS.map(s => [s.id, s]));
-const FILTERS = { std: [0.299, 0.587, 0.114], ye: [0.36, 0.6, 0.04], r: [0.72, 0.28, 0.0], g: [0.22, 0.72, 0.06] };
+// B&W filter weights on linear light; Std = Rec.709 luminance
+const FILTERS = { std: [0.2126, 0.7152, 0.0722], ye: [0.3, 0.66, 0.04], r: [0.62, 0.36, 0.02], g: [0.16, 0.76, 0.08] };
+// OKLCh hue of the sRGB primaries/secondaries R Y G C B M — the six sector centres
+const SECTOR_HUES = [29.2, 109.8, 142.5, 194.8, 264.1, 328.4];
 const FILTER_SUFFIX = { std: '', ye: '+Ye', r: '+R', g: '+G' };
 
 const DEFAULTS = {
@@ -493,14 +501,15 @@ uniform vec3 uWB;
 uniform float uDRW;
 uniform float uCon, uHL, uSH, uGam, uLift;
 uniform float uSat;
-uniform float uHue[6];
-uniform float uSatS[6];
-uniform float uLumS[6];
-uniform vec3 uTintS, uTintH;
+uniform float uCtr[7];
+uniform float uHue[7];
+uniform float uSatS[7];
+uniform float uLumS[7];
+uniform vec2 uTintS, uTintH;
 uniform float uCC, uFXB;
 uniform float uMono;
 uniform vec3 uMix;
-uniform vec3 uTone;
+uniform vec2 uTone;
 uniform float uSharpK, uClarK, uClarR;
 uniform float uGrain, uGrainCell;
 uniform sampler2D uLut;
@@ -516,16 +525,38 @@ float vnoise(vec2 p){
   float a = hash(i), b = hash(i + vec2(1.0, 0.0)), c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
-vec3 rgb2hsv(vec3 c){
-  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
-  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-  float d = q.x - min(q.w, q.y); float e = 1.0e-10;
-  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+vec3 toLin(vec3 c){ return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
+vec3 toSrgb(vec3 c){ c = max(c, 0.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+// OKLab (Björn Ottosson): hue/chroma edits stay perceptually even across lightness
+vec3 lin2lab(vec3 c){
+  vec3 lms = vec3(dot(c, vec3(0.4122214708, 0.5363325363, 0.0514459929)),
+                  dot(c, vec3(0.2119034982, 0.6806995451, 0.1073969566)),
+                  dot(c, vec3(0.0883024619, 0.2817188376, 0.6299787005)));
+  lms = pow(max(lms, 0.0), vec3(1.0 / 3.0));
+  return vec3(dot(lms, vec3(0.2104542553, 0.7936177850, -0.0040720468)),
+              dot(lms, vec3(1.9779984951, -2.4285922050, 0.4505937099)),
+              dot(lms, vec3(0.0259040371, 0.7827717662, -0.8086757660)));
 }
-vec3 hsv2rgb(vec3 c){
-  vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
-  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+vec3 lab2lin(vec3 c){
+  vec3 lms = vec3(dot(c, vec3(1.0, 0.3963377774, 0.2158037573)),
+                  dot(c, vec3(1.0, -0.1055613458, -0.0638541728)),
+                  dot(c, vec3(1.0, -0.0894841775, -1.2914855480)));
+  lms = lms * lms * lms;
+  return vec3(dot(lms, vec3(4.0767416621, -3.3077115913, 0.2309699292)),
+              dot(lms, vec3(-1.2684380046, 2.6097574011, -0.3413193965)),
+              dot(lms, vec3(-0.0041960863, -0.7034186147, 1.7076147010)));
+}
+bool inGamut(vec3 c){ return all(greaterThanEqual(c, vec3(-1e-4))) && all(lessThanEqual(c, vec3(1.0001))); }
+// out-of-gamut colours lose chroma at constant L and hue instead of clipping per channel (which skews hue)
+vec3 fitGamut(vec3 lab){
+  vec3 c = lab2lin(lab);
+  if (inGamut(c)) return clamp(c, 0.0, 1.0);
+  float lo = 0.0, hi = 1.0;
+  for (int i = 0; i < 10; i++) {
+    float k = 0.5 * (lo + hi);
+    if (inGamut(lab2lin(vec3(lab.x, lab.yz * k)))) lo = k; else hi = k;
+  }
+  return clamp(lab2lin(vec3(lab.x, lab.yz * lo)), 0.0, 1.0);
 }
 float curve(float x){
   x = clamp(x, 0.0, 1.0);
@@ -572,43 +603,47 @@ void main(){
   }
 
   // linear light: exposure, white balance, dynamic-range shoulder
-  vec3 lin = pow(c, vec3(2.2)) * uExpo * uWB;
+  vec3 lin = toLin(c) * uExpo * uWB;
   if (uDRW > 0.0) {
     float l = dot(lin, LW);
     if (l > 0.25) { float nl = 0.25 + (l - 0.25) / (1.0 + (l - 0.25) / uDRW); lin *= nl / l; }
   }
-  vec3 g = pow(clamp(lin, 0.0, 1.0), vec3(1.0 / 2.2));
+  lin = clamp(lin, 0.0, 1.0);
 
-  // monochrome branch
-  float m = curve(clamp(dot(g, uMix), 0.0, 1.0));
+  // monochrome branch: filter weights act on linear light, toning is an OKLab a/b offset
+  float m = curve(toSrgb(vec3(dot(lin, uMix))).r);
   float mk = smoothstep(0.0, 0.3, m) * (1.0 - 0.6 * smoothstep(0.7, 1.0, m));
-  vec3 mono = clamp(vec3(m) + uTone * mk, 0.0, 1.0);
+  vec3 mlab = lin2lab(toLin(vec3(m)));
+  mlab.yz += uTone * mk;
+  vec3 mono = toSrgb(fitGamut(mlab));
 
-  // colour branch
-  vec3 col = curve3(g);
-  vec3 hsv = rgb2hsv(col);
-  float hd = hsv.x * 360.0;
-  float hs = 0.0, ss = 0.0, vs = 0.0, wb = 0.0;
+  // colour branch: tone curve per channel (film-like), then per-hue edits in OKLCh
+  vec3 lab = lin2lab(toLin(curve3(toSrgb(lin))));
+  float L = lab.x, C = length(lab.yz);
+  float h = degrees(atan(lab.z, lab.y));
+  if (h < uCtr[0]) h += 360.0;
+  float hs = 0.0, ss = 1.0, vs = 1.0;
   for (int i = 0; i < 6; i++) {
-    float d = abs(mod(hd - float(i) * 60.0 + 180.0, 360.0) - 180.0);
-    float w = max(0.0, 1.0 - d / 60.0);
-    hs += w * uHue[i]; ss += w * uSatS[i]; vs += w * uLumS[i];
-    if (i == 3) wb += 0.5 * w;
-    if (i == 4) wb += w;
+    if (h >= uCtr[i] && h < uCtr[i + 1]) {
+      float t = smoothstep(uCtr[i], uCtr[i + 1], h);
+      hs = mix(uHue[i], uHue[i + 1], t);
+      ss = mix(uSatS[i], uSatS[i + 1], t);
+      vs = mix(uLumS[i], uLumS[i + 1], t);
+    }
   }
-  float sw = smoothstep(0.05, 0.4, hsv.y);
-  hsv.x = fract(hsv.x + hs * sw / 360.0 + 1.0);
-  hsv.y = clamp(hsv.y * mix(1.0, ss, sw), 0.0, 1.0);
-  hsv.z *= mix(1.0, vs, sw);
-  float cm = smoothstep(0.3, 0.9, hsv.y);
-  hsv.z *= 1.0 - uCC * 0.09 * cm * smoothstep(0.15, 0.6, hsv.z);
-  hsv.y = min(1.0, hsv.y * (1.0 + uCC * 0.035 * cm));
-  hsv.z *= 1.0 - uFXB * 0.12 * wb * smoothstep(0.2, 0.6, hsv.y);
-  col = hsv2rgb(hsv);
-  float lum = dot(col, LW);
-  col = mix(vec3(lum), col, uSat);
-  col += uTintS * (1.0 - lum) * (1.0 - lum) + uTintH * lum * lum;
-  vec3 outc = mix(clamp(col, 0.0, 1.0), mono, uMono);
+  float sw = smoothstep(0.015, 0.06, C);   // leave neutrals alone
+  h += hs * sw; C *= mix(1.0, ss, sw); L *= mix(1.0, vs, sw);
+  float cm = smoothstep(0.07, 0.2, C);    // colour chrome: deepen tone of highly saturated colours
+  L *= 1.0 - uCC * 0.045 * cm * smoothstep(0.2, 0.6, L);
+  C *= 1.0 + uCC * 0.03 * cm;
+  float db = abs(mod(h - 255.0 + 180.0, 360.0) - 180.0);
+  L *= 1.0 - uFXB * 0.06 * (1.0 - smoothstep(25.0, 60.0, db)) * smoothstep(0.05, 0.15, C);
+  C *= uSat;
+  float hr = radians(h);
+  lab = vec3(L, C * cos(hr), C * sin(hr));
+  lab.yz += uTintS * (1.0 - L) * (1.0 - L) + uTintH * L * L;
+  vec3 col = toSrgb(fitGamut(lab));
+  vec3 outc = mix(col, mono, uMono);
   if (uLutMix > 0.0) outc = mix(outc, applyLut(outc), uLutMix);
 
   // sharpness / clarity
@@ -650,7 +685,7 @@ function initGL() {
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   for (const n of ['uTex', 'uTexel', 'uSplit', 'uExpo', 'uWB', 'uDRW', 'uCon', 'uHL', 'uSH', 'uGam', 'uLift', 'uSat',
-    'uHue[0]', 'uSatS[0]', 'uLumS[0]', 'uTintS', 'uTintH', 'uCC', 'uFXB', 'uMono', 'uMix', 'uTone',
+    'uCtr[0]', 'uHue[0]', 'uSatS[0]', 'uLumS[0]', 'uTintS', 'uTintH', 'uCC', 'uFXB', 'uMono', 'uMix', 'uTone',
     'uSharpK', 'uClarK', 'uClarR', 'uGrain', 'uGrainCell',
     'uLut', 'uLutN', 'uLutCols', 'uLutMix', 'uLutDim', 'uLutMin', 'uLutMax']) U[n.replace('[0]', '')] = gl.getUniformLocation(prog, n);
   maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), 8192);
@@ -708,6 +743,7 @@ function wbMul() {
   return m.map(v => v / l);
 }
 
+const wrap7 = a => [...a, a[0]];
 function render(splitPos = split) {
   if (!tex) return;
   const s = SIM[R.sim];
@@ -728,22 +764,23 @@ function render(splitPos = split) {
   gl.uniform1f(U.uMono, s.mono ? 1 : 0);
   if (s.mono) {
     gl.uniform1f(U.uSat, 1);
-    gl.uniform1fv(U.uHue, [0, 0, 0, 0, 0, 0]);
-    gl.uniform1fv(U.uSatS, [1, 1, 1, 1, 1, 1]);
-    gl.uniform1fv(U.uLumS, [1, 1, 1, 1, 1, 1]);
-    gl.uniform3f(U.uTintS, 0, 0, 0); gl.uniform3f(U.uTintH, 0, 0, 0);
+    gl.uniform1fv(U.uHue, wrap7([0, 0, 0, 0, 0, 0]));
+    gl.uniform1fv(U.uSatS, wrap7([1, 1, 1, 1, 1, 1]));
+    gl.uniform1fv(U.uLumS, wrap7([1, 1, 1, 1, 1, 1]));
+    gl.uniform2f(U.uTintS, 0, 0); gl.uniform2f(U.uTintH, 0, 0);
     gl.uniform1f(U.uCC, 0); gl.uniform1f(U.uFXB, 0);
   } else {
     gl.uniform1f(U.uSat, s.sat * (1 + 0.1 * R.color));
-    gl.uniform1fv(U.uHue, s.hue);
-    gl.uniform1fv(U.uSatS, s.satS);
-    gl.uniform1fv(U.uLumS, s.lumS);
-    gl.uniform3fv(U.uTintS, s.tS); gl.uniform3fv(U.uTintH, s.tH);
+    gl.uniform1fv(U.uHue, wrap7(s.hue));
+    gl.uniform1fv(U.uSatS, wrap7(s.satS));
+    gl.uniform1fv(U.uLumS, wrap7(s.lumS));
+    gl.uniform2fv(U.uTintS, s.tS); gl.uniform2fv(U.uTintH, s.tH);
     gl.uniform1f(U.uCC, R.cc); gl.uniform1f(U.uFXB, R.fxb);
   }
   gl.uniform3fv(U.uMix, FILTERS[s.filters ? R.filter : 'std']);
-  const tb = s.toneBase || [0, 0, 0], k = 0.008;
-  gl.uniform3f(U.uTone, tb[0] + k * R.wc + 0.5 * k * R.mg, tb[1] - k * R.mg, tb[2] - k * R.wc + 0.5 * k * R.mg);
+  const tb = s.toneBase || [0, 0];
+  gl.uniform2f(U.uTone, tb[0] + 0.0015 * R.wc + 0.005 * R.mg, tb[1] + 0.006 * R.wc);
+  gl.uniform1fv(U.uCtr, wrap7(SECTOR_HUES).map((v, i) => i === 6 ? v + 360 : v));
   gl.uniform1f(U.uSharpK, R.sharp > 0 ? R.sharp * 0.45 : R.sharp * 0.2);
   gl.uniform1f(U.uClarK, R.clarity * 0.1);
   gl.uniform1f(U.uClarR, Math.max(texW, texH) * 0.01);
