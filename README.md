@@ -9,7 +9,7 @@ Web app chạy hoàn toàn trên trình duyệt: tải ảnh lên, áp Film Simu
 - Recipe: DR100/200/400, Highlight/Shadow (−2…+4), Color, Color Chrome Effect, FX Blue, WB Auto/Kelvin + Shift R/B, Sharpness, Clarity, Grain (Weak/Strong, Small/Large), Exposure (1/3 EV), Monochromatic WC/MG.
 - 7 recipe dựng sẵn, recipe card để chép lên máy, lưu recipe vào localStorage.
 - Thanh so sánh trước/sau, kéo-thả / dán ảnh, xuất JPEG độ phân giải gốc (tối đa 6144px).
-- Nạp LUT 3D `.cube` (đến 129³, hỗ trợ `DOMAIN_MIN/MAX`) với thanh cường độ; LUT áp sau film sim, trước sharpness/grain.
+- Nạp LUT 3D `.cube` (đến 129³, hỗ trợ `DOMAIN_MIN/MAX`) với thanh cường độ; LUT áp sau film sim, trước sharpness/grain. Texture LUT dùng float32, tự lùi về float16 rồi 8-bit nếu GPU không hỗ trợ lọc tuyến tính (độ chính xác hiện ở góc mục LUT).
 - Đồng bộ recipe bằng JSON: chép recipe hiện tại hoặc toàn bộ recipe đã lưu, dán/mở file `.json` để nạp (giá trị ngoài dải được kẹp về giới hạn của máy).
 
 ## Chạy local
