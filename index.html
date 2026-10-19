@@ -133,6 +133,11 @@ aside.panel { background: var(--panel); border-left: 1px solid var(--line); over
 .json { width: 100%; resize: vertical; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise);
   font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; }
 .saved { display: grid; gap: 6px; }
+.presets.fxw { max-height: 430px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
+.presets.fxw .preset { display: grid; gap: 2px; }
+.presets.fxw .preset b { white-space: normal; }
+.presets.fxw .del { flex: none; }
+a.btn { text-decoration: none; color: inherit; }
 .saved .item { display: flex; gap: 6px; }
 .saved .item .preset { flex: 1; min-width: 0; }
 .saved .item .preset b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -199,6 +204,11 @@ aside.panel { background: var(--panel); border-left: 1px solid var(--line); over
       <div class="sec">
         <h2>Recipe dựng sẵn</h2>
         <div class="presets" id="presets"></div>
+      </div>
+      <div class="sec">
+        <h2>Fuji X Weekly <small>top 2026</small></h2>
+        <div class="presets fxw saved" id="presetsFxw"></div>
+        <p class="hint">24 recipe được xem nhiều nhất trên fujixweekly.com (1/1–31/7/2026), của Ritchie Roesch và cộng sự. Bấm ↗ để đọc bài gốc. App chỉ mô phỏng gần đúng film simulation nên màu sẽ không giống hệt máy thật.</p>
       </div>
       <div class="sec"><h2>Tông &amp; dải sáng</h2><div class="row-group" id="g-tone"></div></div>
       <div class="sec"><h2>Màu</h2><div id="g-color"></div></div>
@@ -324,6 +334,88 @@ const PRESETS = [
   { name: 'Phố Cổ Acros', sim: 'acros', filter: 'r', dr: 200, hl: 1, sh: 2, sharp: 1, clarity: 3, grain: 2, grainSize: 'L', wc: 1, mg: 0, ev: 0 },
 ];
 
+/* Fuji X Weekly — Top 26 most-viewed recipes of 2026 (1 Jan–31 Jul), https://fujixweekly.com/2026/08/03/top-26-most-popular-fujifilm-recipes-of-2026-so-far-summer-edition/
+   Settings copied from each recipe page. #8 Universal Negative and #17 Film Dial are sets of 14 recipes and are left out.
+   ev = midpoint of the suggested range, in 1/3 EV. `orig` keeps the camera wording the app cannot render exactly;
+   the recipe card prints it while the preset is unmodified. */
+const FXW = 'https://fujixweekly.com/';
+const FXW_PRESETS = [
+  { rank: 1, name: 'Reggie’s Portra', by: 'Reggie Ballesteros', src: FXW + '2022/06/11/fujifilm-x-trans-iv-film-simulation-recipe-reggies-portra/',
+    sim: 'cc', dr: 'auto', hl: -1, sh: -1, color: 2, sharp: -2, clarity: 0, grain: 1, grainSize: 'S', cc: 2, fxb: 1, wbMode: 'auto', wbR: 2, wbB: -4, ev: 0,
+    orig: { exp: 'không gợi ý, tuỳ từng ảnh' } },
+  { rank: 2, name: 'Kodachrome 64 (X-Trans IV)', src: FXW + '2020/05/27/my-fujifilm-x100v-kodachrome-64-film-simulation-recipe/',
+    sim: 'cc', dr: 200, hl: 0, sh: 0, color: 2, sharp: 1, clarity: 3, grain: 1, grainSize: 'S', cc: 2, fxb: 1, wbMode: 'day', wbR: 2, wbB: -5, ev: 1,
+    orig: { exp: '0 to +2/3 (typically)' } },
+  { rank: 3, name: 'Kodak Gold 200 (X-Trans V)', src: FXW + '2023/10/24/kodak-gold-200-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'cc', dr: 400, hl: -1.5, sh: 0.5, color: 3, sharp: -2, clarity: -2, grain: 2, grainSize: 'S', cc: 1, fxb: 0, wbMode: 'day', wbR: 4, wbB: -5, ev: 2,
+    orig: { exp: '+2/3 to +1 (typically)' } },
+  { rank: 4, name: 'Vibrant Arizona', src: FXW + '2023/04/25/getting-a-wes-anderson-look-from-your-fujifilm-camera-4-new-film-simulation-recipes/',
+    sim: 'cc', dr: 400, hl: -2, sh: -2, color: 4, sharp: -2, clarity: -3, grain: 1, grainSize: 'S', cc: 0, fxb: 1, wbMode: 'k', k: 4350, wbR: 6, wbB: -8, ev: 3,
+    orig: { dr: 'DR-P Strong (D-Range Priority, thay cho DR/Highlight/Shadow)', tone: true, exp: '+2/3 to +1 1/3 (typically)' },
+    note: 'App chưa có D-Range Priority; DR-P Strong được xấp xỉ bằng DR400, Highlight -2, Shadow -2.' },
+  { rank: 5, name: 'Kodachrome 64 (X-Trans V)', src: FXW + '2022/11/28/kodachrome-64-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'cc', dr: 200, hl: 0, sh: 0.5, color: 2, sharp: 1, clarity: 3, grain: 1, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'day', wbR: 2, wbB: -5, ev: 1,
+    orig: { exp: '0 to +2/3 (typically)' } },
+  { rank: 6, name: 'Kodak Portra 400 v2 (X-Trans V)', src: FXW + '2022/12/16/kodak-portra-400-v2-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'cc', dr: 400, hl: 0, sh: -2, color: 2, sharp: -2, clarity: -2, grain: 2, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'k', k: 5200, wbR: 1, wbB: -6, ev: 2,
+    orig: { exp: '+1/3 to +1 (typically)' } },
+  { rank: 7, name: 'Kodak Tri-X 400', by: 'Anders Lindborg', src: FXW + '2020/06/18/fujifilm-x100v-film-simulation-recipe-kodak-tri-x-400/',
+    sim: 'acros', filter: 'ye', dr: 200, hl: 0, sh: 3, sharp: 1, clarity: 4, grain: 2, grainSize: 'L', cc: 2, fxb: 0, wbMode: 'day', wbR: 9, wbB: -9, ev: 2,
+    orig: { sim: 'Acros (+Ye, +R hoặc +G)', exp: '+1/3 to +1 (typically)' }, note: 'Recipe cho chọn filter Ye, R hoặc G; app mặc định Ye.' },
+  { rank: 9, name: 'CineStill 800T (X-Trans V)', src: FXW + '2024/04/16/cinestill-800t-fujifilm-x-trans-v-film-simulation-recipe/',
+    sim: 'eterna', dr: 400, hl: 0, sh: 2, color: 4, sharp: -3, clarity: -5, grain: 2, grainSize: 'L', cc: 2, fxb: 1, wbMode: 'k', k: 4200, wbR: -6, wbB: -4, ev: 0,
+    orig: { wb: 'Fluorescent 3', exp: '-1/3 to +2/3 (typically)' }, note: 'WB Fluorescent 3 (đèn huỳnh quang trắng lạnh) được xấp xỉ bằng 4200K.' },
+  { rank: 10, name: 'Pacific Blues (X-Trans V)', src: FXW + '2022/12/06/pacific-blues-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'cn', dr: 400, hl: -2, sh: 3, color: 4, sharp: -2, clarity: -3, grain: 2, grainSize: 'L', cc: 2, fxb: 1, wbMode: 'k', k: 5800, wbR: 1, wbB: -3, ev: 2,
+    orig: { exp: '+2/3 to +1 (typically)' } },
+  { rank: 11, name: 'Fujifilm Negative', src: FXW + '2024/10/31/fujifilm-negative-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'reala', dr: 400, hl: -1, sh: -0.5, color: 2, sharp: -1, clarity: -2, grain: 1, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'k', k: 5000, wbR: 0, wbB: -2, ev: 2,
+    orig: { exp: '+1/3 to +1 (typically)' } },
+  { rank: 12, name: 'Kodak Portra 800 v3', src: FXW + '2024/02/14/kodak-portra-800-v3-fujifilm-x-t5-x-trans-v-x-e4-x-trans-iv-film-simulation-recipe/',
+    sim: 'cc', dr: 400, hl: -2, sh: -0.5, color: 3, sharp: -2, clarity: -3, grain: 2, grainSize: 'L', cc: 2, fxb: 0, wbMode: 'k', k: 6600, wbR: -1, wbB: -3, ev: 2,
+    orig: { fxb: 'Off (X-Trans V); Weak (X-Trans IV)', exp: '+1/3 to +1 1/3 (typically)' } },
+  { rank: 13, name: 'Pacific Blues (X-Trans IV)', src: FXW + '2022/08/04/fujifilm-x-e4-x-trans-iv-film-simulation-recipe-pacific-blues/',
+    sim: 'cn', dr: 400, hl: -2, sh: 3, color: 4, sharp: -2, clarity: -3, grain: 2, grainSize: 'L', cc: 2, fxb: 2, wbMode: 'k', k: 5800, wbR: 1, wbB: -3, ev: 2,
+    orig: { exp: '+2/3 to +1 (typically)' } },
+  { rank: 14, name: 'Reggie’s Superia', by: 'Reggie Ballesteros', src: FXW + '2026/03/12/reggies-superia-a-fujifilm-recipe-for-x-trans-iv-v-cameras/',
+    sim: 'cn', dr: 'auto', hl: -2, sh: -1, color: 1, sharp: -2, clarity: 0, grain: 2, grainSize: 'L', cc: 2, fxb: 2, wbMode: 'auto', wbR: 1, wbB: -3, ev: 0,
+    orig: { exp: 'không gợi ý, tuỳ từng ảnh' } },
+  { rank: 15, name: 'Kodak Portra 400 v2 (X-Trans IV)', src: FXW + '2020/12/30/fujifilm-x100v-film-simulation-recipe-kodak-portra-400-v2/',
+    sim: 'cc', dr: 400, hl: 0, sh: -2, color: 2, sharp: -2, clarity: -2, grain: 2, grainSize: 'S', cc: 2, fxb: 1, wbMode: 'k', k: 5200, wbR: 1, wbB: -6, ev: 2,
+    orig: { exp: '+1/3 to +1 (typically)' } },
+  { rank: 16, name: 'California Summer', src: FXW + '2024/06/04/california-summer-fujifilm-x100vi-x-trans-v-film-simulation-recipe/',
+    sim: 'nn', dr: 400, hl: -2, sh: -1, color: 4, sharp: -2, clarity: -4, grain: 1, grainSize: 'S', cc: 2, fxb: 1, wbMode: 'k', k: 6700, wbR: -1, wbB: -6, ev: 3,
+    orig: { exp: '+2/3 to +1 1/3 (typically)' } },
+  { rank: 18, name: 'Kodak Portra 400 (X-Trans IV)', src: FXW + '2020/06/10/fujifilm-x100v-film-simulation-kodak-portra-400/',
+    sim: 'cc', dr: 'auto', hl: -1, sh: -2, color: 2, sharp: -2, clarity: 2, grain: 2, grainSize: 'S', cc: 2, fxb: 1, wbMode: 'day', wbR: 3, wbB: -5, ev: 2,
+    orig: { exp: '+1/3 to +1 (typically)' } },
+  { rank: 19, name: 'Reala Ace (recipe Classic Neg)', src: FXW + '2023/09/15/reala-ace-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'cn', dr: 400, hl: -1.5, sh: -2, color: 2, sharp: 0, clarity: -2, grain: 1, grainSize: 'S', cc: 2, fxb: 2, wbMode: 'auto', wbR: -1, wbB: 1, ev: 1,
+    orig: { exp: '-1/3 to +1 (typically)' } },
+  { rank: 20, name: 'Easy Reala Ace', by: 'Nathalie Boucry', src: FXW + '2024/06/20/easy-reala-ace-fujifilm-x100vi-x-trans-v-film-simulation-recipe/',
+    sim: 'reala', dr: 400, hl: -1, sh: 0, color: 0, sharp: 0, clarity: 0, grain: 1, grainSize: 'S', cc: 2, fxb: 1, wbMode: 'auto', wbR: 0, wbB: 0, ev: 2,
+    orig: { exp: '+1/3 to +1 (typically)' } },
+  { rank: 21, name: 'Kodak Gold 200 (X-Trans III)', src: FXW + '2020/04/16/my-fujifilm-x-t30-kodak-gold-200-film-simulation-recipe/',
+    sim: 'cc', dr: 'auto', hl: -2, sh: 1, color: 3, sharp: -2, clarity: 0, grain: 2, grainSize: 'S', cc: 0, fxb: 0, wbMode: 'day', wbR: 4, wbB: -5, ev: 3,
+    orig: { grain: 'Strong', exp: '+2/3 to +1 1/3 (typically)' } },
+  { rank: 22, name: 'PRO Negative 160C', src: FXW + '2024/03/27/pro-negative-160c-fujifilm-x100vi-film-simulation-recipe/',
+    sim: 'reala', dr: 200, hl: -1, sh: -1, color: 4, sharp: -1, clarity: -2, grain: 1, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'auto', wbR: 1, wbB: -2, ev: 1,
+    orig: { exp: '0 to +2/3 (typically)' } },
+  { rank: 23, name: '1976 Kodak', src: FXW + '2023/08/03/1976-kodak-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'nn', dr: 200, hl: 1.5, sh: 3, color: 4, sharp: -2, clarity: -3, grain: 2, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'auto', wbR: -2, wbB: -4, ev: 2,
+    orig: { exp: '+1/3 to +1 (typically)' } },
+  { rank: 24, name: 'Vintage Kodachrome (X-Trans III)', src: FXW + '2017/10/21/my-fujifilm-x100f-vintage-kodachrome-film-simulation-recipe/',
+    sim: 'cc', dr: 200, hl: 4, sh: -2, color: 4, sharp: 1, clarity: 0, grain: 2, grainSize: 'S', cc: 0, fxb: 0, wbMode: 'auto', wbR: 2, wbB: -4, ev: -2,
+    orig: { grain: 'Strong', exp: '-1/3 to -1 (typically)' } },
+  { rank: 25, name: 'Fujicolor Super HG v2 (X-Trans V)', by: 'Thomas Schwab', src: FXW + '2023/07/20/fujicolor-super-hg-v2-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'cn', dr: 400, hl: -1, sh: 1, color: 2, sharp: 0, clarity: 2, grain: 1, grainSize: 'L', cc: 1, fxb: 1, wbMode: 'auto', wbR: -3, wbB: -1, ev: 2,
+    orig: { wb: 'Auto White Priority', exp: '+2/3 to +1 (typically)' } },
+  { rank: 26, name: 'McCurry Kodachrome', src: FXW + '2024/01/25/mccurry-kodachrome-a-fujifilm-x-trans-iv-film-simulation-recipe/',
+    sim: 'cc', dr: 100, hl: 0, sh: 0, color: 2, sharp: -2, clarity: 0, grain: 1, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'k', k: 5900, wbR: -1, wbB: 4, ev: 0,
+    orig: { exp: '-1/3 to +1/3 (typically)' } },
+];
+PRESETS.push(...FXW_PRESETS);
+
 /* ---------- formatting ---------- */
 const sgn = v => (v > 0 ? '+' : '') + (Number.isInteger(v) ? v : v.toFixed(1));
 const fmtEV = t => {
@@ -332,11 +424,13 @@ const fmtEV = t => {
   return (t > 0 ? '+' : '-') + [w || '', r ? r + '/3' : ''].filter(Boolean).join(' ');
 };
 const LEVEL = ['Off', 'Weak', 'Strong'];
+const drLabel = dr => dr === 'auto' ? 'DR-Auto' : 'DR' + dr;
+const wbLabel = r => r.wbMode === 'k' ? r.k + 'K' : r.wbMode === 'day' ? 'Daylight' : 'Auto';
 
 /* ---------- controls ---------- */
 const CONTROLS = {
   'g-tone': [
-    ['seg', 'dr', 'Dynamic Range', [[100, 'DR100'], [200, 'DR200'], [400, 'DR400']]],
+    ['seg', 'dr', 'Dynamic Range', [['auto', 'Auto'], [100, 'DR100'], [200, 'DR200'], [400, 'DR400']]],
     ['range', 'hl', 'Highlight', -2, 4, 0.5, sgn],
     ['range', 'sh', 'Shadow', -2, 4, 0.5, sgn],
     ['range', 'ev', 'Exposure', -9, 9, 1, v => fmtEV(v) + ' EV'],
@@ -350,8 +444,8 @@ const CONTROLS = {
     ['range', 'mg', 'Monochromatic MG (magenta/green)', -9, 9, 1, sgn, 'mono'],
   ],
   'g-wb': [
-    ['seg', 'wbMode', 'Chế độ', [['auto', 'Auto'], ['k', 'Kelvin']]],
-    ['range', 'k', 'Nhiệt độ màu', 2500, 10000, 100, v => v + 'K', 'kelvin'],
+    ['seg', 'wbMode', 'Chế độ', [['auto', 'Auto'], ['day', 'Daylight'], ['k', 'Kelvin']]],
+    ['range', 'k', 'Nhiệt độ màu', 2500, 10000, 50, v => v + 'K', 'kelvin'],
     ['range', 'wbR', 'WB Shift R', -9, 9, 1, sgn],
     ['range', 'wbB', 'WB Shift B', -9, 9, 1, sgn],
   ],
@@ -416,15 +510,19 @@ function buildSims() {
 }
 
 function buildPresets() {
-  const box = $('presets');
   PRESETS.forEach((p, i) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'preset'; b.id = 'preset-' + i;
     b.innerHTML = `<b></b><span></span>`;
-    b.querySelector('b').textContent = p.name;
-    b.querySelector('span').textContent = SIM[p.sim].name + (p.filter && p.filter !== 'std' ? FILTER_SUFFIX[p.filter] : '') + ' · DR' + p.dr;
+    b.querySelector('b').textContent = (p.rank ? '#' + p.rank + ' ' : '') + p.name;
+    b.querySelector('span').textContent = SIM[p.sim].name + (p.filter && p.filter !== 'std' ? FILTER_SUFFIX[p.filter] : '') + ' · ' + drLabel(p.dr);
     b.addEventListener('click', () => applyRecipe(p, i));
-    box.appendChild(b);
+    if (!p.src) { $('presets').appendChild(b); return; }
+    const item = document.createElement('div'); item.className = 'item';
+    const a = document.createElement('a');
+    a.className = 'btn ghost del'; a.href = p.src; a.target = '_blank'; a.rel = 'noopener'; a.textContent = '↗';
+    a.setAttribute('aria-label', 'Mở bài gốc: ' + p.name);
+    item.append(b, a); $('presetsFxw').appendChild(item);
   });
 }
 
@@ -449,12 +547,12 @@ function syncUI() {
   };
   for (const r of rows) { r.el.hidden = r.vis ? !show[r.vis] : false; r.sync(); }
   document.querySelectorAll('.sim').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === R.sim)));
-  document.querySelectorAll('#presets .preset').forEach((b, i) => b.setAttribute('aria-pressed', String(i === activePreset)));
+  document.querySelectorAll('[id^="preset-"]').forEach(b => b.setAttribute('aria-pressed', String(b.id === 'preset-' + activePreset)));
   $('tagR').textContent = simLabel();
   $('card').textContent = cardText();
-  const wb = R.wbMode === 'k' ? R.k + 'K' : 'AWB';
+  const wb = R.wbMode === 'auto' ? 'AWB' : wbLabel(R);
   $('edge').innerHTML = '';
-  [simLabel(), 'DR' + R.dr, wb + ' R' + sgn(R.wbR) + ' B' + sgn(R.wbB), fmtEV(R.ev) + ' EV']
+  [simLabel(), drLabel(R.dr), wb + ' R' + sgn(R.wbR) + ' B' + sgn(R.wbB), fmtEV(R.ev) + ' EV']
     .forEach(t => { const sp = document.createElement('span'); sp.textContent = t; $('edge').appendChild(sp); });
 }
 
@@ -465,22 +563,31 @@ function simLabel() {
 
 function cardText() {
   const s = SIM[R.sim];
+  const pre = PRESETS[activePreset];
+  const o = (pre && pre.orig) || {};          // original camera wording, only while the preset is unmodified
   const L = [($('recipeName').value || 'Recipe').trim()];
-  L.push('Film Simulation: ' + simLabel());
-  L.push('Dynamic Range: DR' + R.dr);
-  L.push('Grain Effect: ' + (R.grain ? LEVEL[R.grain] + ', ' + (R.grainSize === 'L' ? 'Large' : 'Small') : 'Off'));
+  L.push('Film Simulation: ' + (o.sim || simLabel()));
+  L.push('Dynamic Range: ' + (o.dr || drLabel(R.dr)));
+  L.push('Grain Effect: ' + (o.grain || (R.grain ? LEVEL[R.grain] + ', ' + (R.grainSize === 'L' ? 'Large' : 'Small') : 'Off')));
   if (!s.mono) {
     L.push('Color Chrome Effect: ' + LEVEL[R.cc]);
-    L.push('Color Chrome FX Blue: ' + LEVEL[R.fxb]);
+    L.push('Color Chrome FX Blue: ' + (o.fxb || LEVEL[R.fxb]));
   }
-  L.push('White Balance: ' + (R.wbMode === 'k' ? R.k + 'K' : 'Auto') + ', ' + sgn(R.wbR) + ' Red & ' + sgn(R.wbB) + ' Blue');
-  L.push('Highlight: ' + sgn(R.hl));
-  L.push('Shadow: ' + sgn(R.sh));
+  L.push('White Balance: ' + (o.wb || wbLabel(R)) + ', ' + sgn(R.wbR) + ' Red & ' + sgn(R.wbB) + ' Blue');
+  if (!o.tone) {
+    L.push('Highlight: ' + sgn(R.hl));
+    L.push('Shadow: ' + sgn(R.sh));
+  }
   if (s.mono) L.push('Monochromatic Color: WC ' + sgn(R.wc) + ', MG ' + sgn(R.mg));
   else L.push('Color: ' + sgn(R.color));
   L.push('Sharpness: ' + sgn(R.sharp));
   L.push('Clarity: ' + sgn(R.clarity));
-  L.push('Exposure Compensation: ' + fmtEV(R.ev));
+  L.push('Exposure Compensation: ' + (o.exp || fmtEV(R.ev)));
+  if (pre && pre.src) {
+    L.push('');
+    if (pre.note) L.push('Ghi chú: ' + pre.note);
+    L.push('Nguồn: Fuji X Weekly #' + pre.rank + (pre.by ? ' (' + pre.by + ')' : '') + ' — ' + pre.src);
+  }
   return L.join('\n');
 }
 
@@ -754,7 +861,7 @@ function render(splitPos = split) {
   gl.uniform1f(U.uSplit, splitPos);
   gl.uniform1f(U.uExpo, Math.pow(2, R.ev / 3));
   gl.uniform3fv(U.uWB, wbMul());
-  const t = { 100: 0, 200: 0.9, 400: 0.8 }[R.dr];
+  const t = { auto: 0.9, 100: 0, 200: 0.9, 400: 0.8 }[R.dr];   // DR-Auto renders as DR200
   gl.uniform1f(U.uDRW, t ? (0.75 * (t - 0.25)) / (1 - t) : 0);
   gl.uniform1f(U.uCon, s.con);
   gl.uniform1f(U.uHL, s.hl + R.hl);
@@ -973,7 +1080,7 @@ function renderSaved() {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'preset';
     b.innerHTML = '<b></b><span></span>';
     b.querySelector('b').textContent = r.name;
-    b.querySelector('span').textContent = (SIM[r.sim]?.name || r.sim) + ' · DR' + r.dr;
+    b.querySelector('span').textContent = (SIM[r.sim]?.name || r.sim) + ' · ' + drLabel(r.dr);
     b.addEventListener('click', () => applyRecipe(sanitize(r) || DEFAULTS));
     const d = document.createElement('button'); d.type = 'button'; d.className = 'btn ghost del'; d.textContent = '✕';
     d.setAttribute('aria-label', 'Xoá ' + r.name);
