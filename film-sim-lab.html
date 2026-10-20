@@ -311,7 +311,7 @@ const SECTOR_HUES = [29.2, 109.8, 142.5, 194.8, 264.1, 328.4];
 const FILTER_SUFFIX = { std: '', ye: '+Ye', r: '+R', g: '+G' };
 
 const DEFAULTS = {
-  name: 'Recipe của tôi', sim: 'provia', filter: 'std', dr: 100, hl: 0, sh: 0, ev: 0,
+  name: 'Recipe của tôi', sim: 'provia', filter: 'std', dr: 100, drp: 'off', hl: 0, sh: 0, ev: 0,
   color: 0, cc: 0, fxb: 0, wc: 0, mg: 0,
   wbMode: 'auto', k: 5500, wbR: 0, wbB: 0,
   sharp: 0, clarity: 0, grain: 0, grainSize: 'S',
@@ -343,9 +343,8 @@ const FXW_PRESETS = [
     sim: 'cc', dr: 400, hl: -1.5, sh: 0.5, color: 3, sharp: -2, clarity: -2, grain: 2, grainSize: 'S', cc: 1, fxb: 0, wbMode: 'day', wbR: 4, wbB: -5, ev: 2,
     orig: { exp: '+2/3 to +1 (typically)' } },
   { rank: 4, name: 'Vibrant Arizona', src: FXW + '2023/04/25/getting-a-wes-anderson-look-from-your-fujifilm-camera-4-new-film-simulation-recipes/',
-    sim: 'cc', dr: 400, hl: -2, sh: -2, color: 4, sharp: -2, clarity: -3, grain: 1, grainSize: 'S', cc: 0, fxb: 1, wbMode: 'k', k: 4350, wbR: 6, wbB: -8, ev: 3,
-    orig: { dr: 'DR-P Strong (D-Range Priority, thay cho DR/Highlight/Shadow)', tone: true, exp: '+2/3 to +1 1/3 (typically)' },
-    note: 'App chưa có D-Range Priority; DR-P Strong được xấp xỉ bằng DR400, Highlight -2, Shadow -2.' },
+    sim: 'cc', drp: 'strong', color: 4, sharp: -2, clarity: -3, grain: 1, grainSize: 'S', cc: 0, fxb: 1, wbMode: 'k', k: 4350, wbR: 6, wbB: -8, ev: 3,
+    orig: { exp: '+2/3 to +1 1/3 (typically)' } },
   { rank: 5, name: 'Kodachrome 64 (X-Trans V)', src: FXW + '2022/11/28/kodachrome-64-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
     sim: 'cc', dr: 200, hl: 0, sh: 0.5, color: 2, sharp: 1, clarity: 3, grain: 1, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'day', wbR: 2, wbB: -5, ev: 1,
     orig: { exp: '0 to +2/3 (typically)' } },
@@ -418,14 +417,22 @@ const fmtEV = t => {
 };
 const LEVEL = ['Off', 'Weak', 'Strong'];
 const drLabel = dr => dr === 'auto' ? 'DR-Auto' : 'DR' + dr;
+/* D-Range Priority replaces Dynamic Range + Highlight/Shadow. Equivalents follow Fuji X Weekly's in-camera
+   reprocessing tests on X-Trans V / GFX (fujixweekly.com/2025/01/17/the-curious-case-of-d-range-priority-auto/):
+   Auto = DR200 H-1 S-1 · Weak = DR200 H-2 S-3 · Strong: shadows ≈ DR400 S-2 but highlights compressed harder
+   than DR400 H-2 (no exact camera equivalent, so Strong here is an estimate). t = DR shoulder target, see render(). */
+const DRP = { auto: { t: 0.9, hl: -1, sh: -1 }, weak: { t: 0.9, hl: -2, sh: -3 }, strong: { t: 0.72, hl: -2.5, sh: -2 } };
+const DRP_NAME = { auto: 'Auto', weak: 'Weak', strong: 'Strong' };
+const drText = r => DRP[r.drp] ? 'DR-P ' + DRP_NAME[r.drp] : drLabel(r.dr);
 const wbLabel = r => r.wbMode === 'k' ? r.k + 'K' : r.wbMode === 'day' ? 'Daylight' : 'Auto';
 
 /* ---------- controls ---------- */
 const CONTROLS = {
   'g-tone': [
-    ['seg', 'dr', 'Dynamic Range', [['auto', 'Auto'], [100, 'DR100'], [200, 'DR200'], [400, 'DR400']]],
-    ['range', 'hl', 'Highlight', -2, 4, 0.5, sgn],
-    ['range', 'sh', 'Shadow', -2, 4, 0.5, sgn],
+    ['seg', 'dr', 'Dynamic Range', [['auto', 'Auto'], [100, 'DR100'], [200, 'DR200'], [400, 'DR400']], 'tone'],
+    ['seg', 'drp', 'D-Range Priority', [['off', 'Off'], ['auto', 'Auto'], ['weak', 'Weak'], ['strong', 'Strong']]],
+    ['range', 'hl', 'Highlight', -2, 4, 0.5, sgn, 'tone'],
+    ['range', 'sh', 'Shadow', -2, 4, 0.5, sgn, 'tone'],
     ['range', 'ev', 'Exposure', -9, 9, 1, v => fmtEV(v) + ' EV'],
   ],
   'g-color': [
@@ -508,7 +515,7 @@ function buildPresets() {
     b.type = 'button'; b.className = 'preset'; b.id = 'preset-' + i;
     b.innerHTML = `<b></b><span></span>`;
     b.querySelector('b').textContent = (p.rank ? '#' + p.rank + ' ' : '') + p.name;
-    b.querySelector('span').textContent = SIM[p.sim].name + (p.filter && p.filter !== 'std' ? FILTER_SUFFIX[p.filter] : '') + ' · ' + drLabel(p.dr);
+    b.querySelector('span').textContent = SIM[p.sim].name + (p.filter && p.filter !== 'std' ? FILTER_SUFFIX[p.filter] : '') + ' · ' + drText(p);
     b.addEventListener('click', () => applyRecipe(p, i));
     if (!p.src) { $('presets').appendChild(b); return; }
     const item = document.createElement('div'); item.className = 'item';
@@ -536,7 +543,7 @@ function syncUI() {
   const s = SIM[R.sim];
   const show = {
     color: !s.mono, mono: !!s.mono, filter: !!s.filters,
-    kelvin: R.wbMode === 'k', grain: R.grain > 0,
+    kelvin: R.wbMode === 'k', grain: R.grain > 0, tone: !DRP[R.drp],
   };
   for (const r of rows) { r.el.hidden = r.vis ? !show[r.vis] : false; r.sync(); }
   document.querySelectorAll('.sim').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === R.sim)));
@@ -545,7 +552,7 @@ function syncUI() {
   $('card').textContent = cardText();
   const wb = R.wbMode === 'auto' ? 'AWB' : wbLabel(R);
   $('edge').innerHTML = '';
-  [simLabel(), drLabel(R.dr), wb + ' R' + sgn(R.wbR) + ' B' + sgn(R.wbB), fmtEV(R.ev) + ' EV']
+  [simLabel(), drText(R), wb + ' R' + sgn(R.wbR) + ' B' + sgn(R.wbB), fmtEV(R.ev) + ' EV']
     .forEach(t => { const sp = document.createElement('span'); sp.textContent = t; $('edge').appendChild(sp); });
 }
 
@@ -560,14 +567,15 @@ function cardText() {
   const o = (pre && pre.orig) || {};          // original camera wording, only while the preset is unmodified
   const L = [($('recipeName').value || 'Recipe').trim()];
   L.push('Film Simulation: ' + (o.sim || simLabel()));
-  L.push('Dynamic Range: ' + (o.dr || drLabel(R.dr)));
+  if (DRP[R.drp]) L.push('D-Range Priority: ' + DRP_NAME[R.drp]);
+  else L.push('Dynamic Range: ' + (o.dr || drLabel(R.dr)));
   L.push('Grain Effect: ' + (o.grain || (R.grain ? LEVEL[R.grain] + ', ' + (R.grainSize === 'L' ? 'Large' : 'Small') : 'Off')));
   if (!s.mono) {
     L.push('Color Chrome Effect: ' + LEVEL[R.cc]);
     L.push('Color Chrome FX Blue: ' + (o.fxb || LEVEL[R.fxb]));
   }
   L.push('White Balance: ' + (o.wb || wbLabel(R)) + ', ' + sgn(R.wbR) + ' Red & ' + sgn(R.wbB) + ' Blue');
-  if (!o.tone) {
+  if (!DRP[R.drp]) {
     L.push('Highlight: ' + sgn(R.hl));
     L.push('Shadow: ' + sgn(R.sh));
   }
@@ -854,11 +862,12 @@ function render(splitPos = split) {
   gl.uniform1f(U.uSplit, splitPos);
   gl.uniform1f(U.uExpo, Math.pow(2, R.ev / 3));
   gl.uniform3fv(U.uWB, wbMul());
-  const t = { auto: 0.9, 100: 0, 200: 0.9, 400: 0.8 }[R.dr];   // DR-Auto renders as DR200
+  const drp = DRP[R.drp];
+  const t = drp ? drp.t : { auto: 0.9, 100: 0, 200: 0.9, 400: 0.8 }[R.dr];   // DR-Auto renders as DR200
   gl.uniform1f(U.uDRW, t ? (0.75 * (t - 0.25)) / (1 - t) : 0);
   gl.uniform1f(U.uCon, s.con);
-  gl.uniform1f(U.uHL, s.hl + R.hl);
-  gl.uniform1f(U.uSH, s.sh + R.sh);
+  gl.uniform1f(U.uHL, s.hl + (drp ? drp.hl : R.hl));
+  gl.uniform1f(U.uSH, s.sh + (drp ? drp.sh : R.sh));
   gl.uniform1f(U.uGam, s.gam);
   gl.uniform1f(U.uLift, s.lift);
   gl.uniform1f(U.uMono, s.mono ? 1 : 0);
@@ -1073,7 +1082,7 @@ function renderSaved() {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'preset';
     b.innerHTML = '<b></b><span></span>';
     b.querySelector('b').textContent = r.name;
-    b.querySelector('span').textContent = (SIM[r.sim]?.name || r.sim) + ' · ' + drLabel(r.dr);
+    b.querySelector('span').textContent = (SIM[r.sim]?.name || r.sim) + ' · ' + drText(r);
     b.addEventListener('click', () => applyRecipe(sanitize(r) || DEFAULTS));
     const d = document.createElement('button'); d.type = 'button'; d.className = 'btn ghost del'; d.textContent = '✕';
     d.setAttribute('aria-label', 'Xoá ' + r.name);
