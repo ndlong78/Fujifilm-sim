@@ -134,7 +134,9 @@ aside.panel { background: var(--panel); border-left: 1px solid var(--line); over
   font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; }
 .saved { display: grid; gap: 6px; }
 .presets.fxw { max-height: 430px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
-.presets.fxw .preset { display: grid; gap: 2px; }
+.presets.fxw .preset, #presetsFxwDrp .preset { display: grid; gap: 2px; }
+#presetsFxwDrp .preset b { white-space: normal; }
+.subhead { margin: 4px 0 0; font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .presets.fxw .preset b { white-space: normal; }
 .presets.fxw .del { flex: none; }
 a.btn { text-decoration: none; color: inherit; }
@@ -208,7 +210,9 @@ a.btn { text-decoration: none; color: inherit; }
       <div class="sec">
         <h2>Fuji X Weekly <small>top 2026</small></h2>
         <div class="presets fxw saved" id="presetsFxw"></div>
-        <p class="hint">24 recipe được xem nhiều nhất trên fujixweekly.com (1/1–31/7/2026), của Ritchie Roesch và cộng sự. Bấm ↗ để đọc bài gốc. App chỉ mô phỏng gần đúng film simulation nên màu sẽ không giống hệt máy thật.</p>
+        <h3 class="subhead">Dùng D-Range Priority</h3>
+        <div class="presets saved" id="presetsFxwDrp"></div>
+        <p class="hint">24 recipe được xem nhiều nhất trên fujixweekly.com (1/1–31/7/2026) và các recipe dùng D-Range Priority, của Ritchie Roesch và cộng sự. Bấm ↗ để đọc bài gốc. App chỉ mô phỏng gần đúng film simulation nên màu sẽ không giống hệt máy thật.</p>
       </div>
       <div class="sec"><h2>Tông &amp; dải sáng</h2><div class="row-group" id="g-tone"></div></div>
       <div class="sec"><h2>Màu</h2><div id="g-color"></div></div>
@@ -413,7 +417,29 @@ const FXW_PRESETS = [
     sim: 'cc', dr: 100, hl: 0, sh: 0, color: 2, sharp: -2, clarity: 0, grain: 1, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'k', k: 5900, wbR: -1, wbB: 4, ev: 0,
     orig: { exp: '-1/3 to +1/3 (typically)' } },
 ];
-PRESETS.push(...FXW_PRESETS);
+/* Fuji X Weekly recipes that use D-Range Priority (found via the site's search and its DR-P articles).
+   On X-Trans IV, DR-P Auto almost always picks Weak, so the X-Trans IV "Auto" recipes render with Weak here. */
+const FXW_DRP_PRESETS = [
+  { name: 'Vibrant Arizona (X-Trans IV)', src: FXW + '2023/04/25/getting-a-wes-anderson-look-from-your-fujifilm-camera-4-new-film-simulation-recipes/',
+    sim: 'cc', drp: 'strong', color: 4, sharp: -2, clarity: -3, grain: 1, grainSize: 'S', cc: 0, fxb: 2, wbMode: 'k', k: 4350, wbR: 6, wbB: -8, ev: 3,
+    orig: { exp: '+2/3 to +1 1/3 (typically)' } },
+  { name: 'Pulled Fujicolor Superia', src: FXW + '2021/10/11/fujifilm-x100v-x-trans-iv-film-simulation-recipe-pulled-fujicolor-superia/',
+    sim: 'cn', drp: 'strong', color: 3, sharp: -2, clarity: 2, grain: 1, grainSize: 'S', cc: 2, fxb: 2, wbMode: 'day', wbR: -4, wbB: -2, ev: 1,
+    orig: { exp: '0 to +2/3 (typically)' } },
+  { name: 'Portra-Style', src: FXW + '2021/09/22/fujifilm-x-e4-x-trans-iv-film-simulation-recipe-portra-style/',
+    sim: 'cc', drp: 'weak', color: 1, sharp: -2, clarity: 3, grain: 2, grainSize: 'S', cc: 2, fxb: 1, wbMode: 'k', k: 5000, wbR: 2, wbB: -6, ev: 1,
+    orig: { drp: 'Auto', exp: '0 to +2/3 (typically)' }, note: 'Recipe X-Trans IV dùng DR-P Auto; trên X-Trans IV máy gần như luôn chọn Weak, nên app dùng Weak.' },
+  { name: 'Scanned Superia', src: FXW + '2021/09/15/fujifilm-x-e4-x-trans-iv-film-simulation-recipe-scanned-superia/',
+    sim: 'cn', drp: 'weak', color: 3, sharp: -3, clarity: 3, grain: 1, grainSize: 'S', cc: 1, fxb: 1, wbMode: 'day', wbR: -2, wbB: 3, ev: 0,
+    orig: { drp: 'Auto', exp: '-1/3 to +1/3 (typically)' }, note: 'Recipe X-Trans IV dùng DR-P Auto; trên X-Trans IV máy gần như luôn chọn Weak, nên app dùng Weak.' },
+  { name: 'Kodak Portra 160 v2', by: 'Thomas Schwab', src: FXW + '2023/11/10/kodak-portra-160-v2-fujifilm-x-t5-x-trans-v-film-simulation-recipe/',
+    sim: 'cc', drp: 'auto', color: 0, sharp: -1, clarity: -2, grain: 1, grainSize: 'S', cc: 1, fxb: 1, wbMode: 'day', wbR: 4, wbB: -5, ev: 2,
+    orig: { exp: '+1/3 to +1 (typically)' } },
+  { name: 'Expired Kodak Vision2 250D', src: FXW + '2025/12/23/expired-kodak-vision2-250d-a-film-simulation-recipe-for-fujifilm-x-trans-iv-x-trans-v-cameras/',
+    sim: 'ebb', drp: 'auto', color: -2, sharp: -2, clarity: -2, grain: 1, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'k', k: 8700, wbR: -4, wbB: -3, ev: 0,
+    orig: { fxb: 'Off (X-Trans V); Weak (X-Trans IV)', exp: '-1/3 to +2/3 (typically)' } },
+];
+PRESETS.push(...FXW_PRESETS, ...FXW_DRP_PRESETS);
 
 /* ---------- formatting ---------- */
 const sgn = v => (v > 0 ? '+' : '') + (Number.isInteger(v) ? v : v.toFixed(1));
@@ -529,7 +555,7 @@ function buildPresets() {
     const a = document.createElement('a');
     a.className = 'btn ghost del'; a.href = p.src; a.target = '_blank'; a.rel = 'noopener'; a.textContent = '↗';
     a.setAttribute('aria-label', 'Mở bài gốc: ' + p.name);
-    item.append(b, a); $('presetsFxw').appendChild(item);
+    item.append(b, a); $(p.rank ? 'presetsFxw' : 'presetsFxwDrp').appendChild(item);
   });
 }
 
@@ -574,7 +600,7 @@ function cardText() {
   const o = (pre && pre.orig) || {};          // original camera wording, only while the preset is unmodified
   const L = [($('recipeName').value || 'Recipe').trim()];
   L.push('Film Simulation: ' + (o.sim || simLabel()));
-  if (DRP[R.drp]) L.push('D-Range Priority: ' + DRP_NAME[R.drp]);
+  if (DRP[R.drp]) L.push('D-Range Priority: ' + (o.drp || DRP_NAME[R.drp]));
   else L.push('Dynamic Range: ' + (o.dr || drLabel(R.dr)));
   L.push('Grain Effect: ' + (o.grain || (R.grain ? LEVEL[R.grain] + ', ' + (R.grainSize === 'L' ? 'Large' : 'Small') : 'Off')));
   if (!s.mono) {
@@ -594,7 +620,7 @@ function cardText() {
   if (pre && pre.src) {
     L.push('');
     if (pre.note) L.push('Ghi chú: ' + pre.note);
-    L.push('Nguồn: Fuji X Weekly #' + pre.rank + (pre.by ? ' (' + pre.by + ')' : '') + ' — ' + pre.src);
+    L.push('Nguồn: Fuji X Weekly' + (pre.rank ? ' #' + pre.rank : '') + (pre.by ? ' (' + pre.by + ')' : '') + ' — ' + pre.src);
   }
   return L.join('\n');
 }
