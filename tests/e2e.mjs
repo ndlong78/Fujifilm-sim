@@ -1,6 +1,7 @@
 // End-to-end tests for index.html in headless Chromium (WebGL via SwiftShader).
 // Usage: node tests/e2e.mjs   (needs the `playwright` package and python3; run ./build.sh first)
 import { createRequire } from 'node:module';
+import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -206,6 +207,65 @@ check('no console errors (viewer)', !viewer.errors.length, viewer.errors.join(' 
 // ---- phone width: nothing scrolls sideways
 const phone = await open({ viewport: { width: 400, height: 860 } });
 check('no horizontal scroll at 400px', (await phone.evaluate(() => document.documentElement.scrollWidth)) <= 400);
+
+// ---- white balance picker neutralises a colour cast
+{
+  const wb = await open();
+  const png = await wb.evaluate(() => {            // warm-cast grey card on the left, colours on the right
+    const c = document.createElement('canvas'); c.width = 600; c.height = 400;
+    const x = c.getContext('2d');
+    x.fillStyle = 'rgb(176,150,118)'; x.fillRect(0, 0, 300, 400);
+    x.fillStyle = 'rgb(40,90,170)'; x.fillRect(300, 0, 300, 200);
+    x.fillStyle = 'rgb(200,60,50)'; x.fillRect(300, 200, 300, 200);
+    return c.toDataURL('image/png').split(',')[1];
+  });
+  await wb.setInputFiles('#file', { name: 'cast.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  await wb.waitForFunction(() => document.getElementById('gl').width === 600);
+  await wb.click('#btnReset');
+  const fb = await wb.locator('#frame').boundingBox();
+  await wb.mouse.click(fb.x + 1, fb.y + fb.height / 2);               // all processed
+  await wb.click('#btnPickWB');
+  await wb.mouse.click(fb.x + fb.width * 0.25, fb.y + fb.height * 0.5);
+  const card = await wb.textContent('#card');
+  const grey = await wb.evaluate(async () => {
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const c = document.getElementById('gl'), g = c.getContext('webgl'), a = new Uint8Array(4);
+    g.readPixels(150, 200, 1, 1, g.RGBA, g.UNSIGNED_BYTE, a); return [a[0], a[1], a[2]];
+  });
+  const cast = Math.max(Math.abs(grey[0] - grey[1]), Math.abs(grey[2] - grey[1]));
+  check('WB picker neutralises a grey card', /White Balance: \d+K/.test(card) && cast <= 4,
+    `${card.match(/White Balance: .*/)[0]} → rgb(${grey.join(',')})`);
+  check('no console errors (WB picker)', !wb.errors.length, wb.errors.join(' | '));
+  await wb.close();
+}
+
+// ---- installable app: served over http, the service worker keeps the page working offline
+{
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
+  const server = createServer((req, res) => {
+    const path = decodeURIComponent(req.url.split('?')[0]).replace(/\/$/, '/index.html');
+    try {
+      const body = readFileSync(join(root, path));
+      res.writeHead(200, { 'content-type': types[path.slice(path.lastIndexOf('.'))] || 'application/octet-stream' });
+      res.end(body);
+    } catch { res.writeHead(404); res.end(); }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const ctx = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+  const app = await ctx.newPage();
+  await app.goto(`http://127.0.0.1:${server.address().port}/`);
+  await app.evaluate(() => navigator.serviceWorker.ready);
+  await app.reload();                                  // now controlled by the service worker
+  await app.waitForFunction(() => !!navigator.serviceWorker.controller);
+  const manifest = await app.evaluate(async () => (await fetch(document.querySelector('link[rel="manifest"]').href)).json());
+  await ctx.setOffline(true);
+  await app.reload();
+  const offlineOk = await app.waitForFunction(() => document.getElementById('gl').width === 1800, null, { timeout: 15000 }).then(() => true, () => false);
+  check('app manifest and icons', manifest.display === 'standalone' && manifest.icons.length === 2);
+  check('page works offline after the first visit', offlineOk);
+  await ctx.close();
+  server.close();
+}
 
 await browser.close();
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

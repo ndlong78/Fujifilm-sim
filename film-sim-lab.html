@@ -65,6 +65,8 @@ header.top {
 .stage { position: relative; background: var(--stage); min-height: 0; display: grid; place-items: center; overflow: hidden; }
 .frame { position: relative; touch-action: none; cursor: ew-resize; box-shadow: 0 10px 40px rgba(0,0,0,.35); }
 .frame canvas { display: block; width: 100%; height: 100%; }
+.frame.picking { cursor: crosshair; }
+#btnPickWB[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .split { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
 .split::before { content: ""; position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 .knob {
@@ -218,7 +220,10 @@ a.btn { text-decoration: none; color: inherit; }
       </div>
       <div class="sec"><h2>Tông &amp; dải sáng</h2><div class="row-group" id="g-tone"></div></div>
       <div class="sec"><h2>Màu</h2><div id="g-color"></div></div>
-      <div class="sec"><h2>Cân bằng trắng</h2><div id="g-wb"></div></div>
+      <div class="sec"><h2>Cân bằng trắng</h2><div id="g-wb"></div>
+        <div class="inline"><button class="btn" id="btnPickWB" type="button" aria-pressed="false">Lấy điểm trung tính trên ảnh</button></div>
+        <p class="hint" id="pickHint" hidden>Bấm vào vùng xám hoặc trắng trên ảnh gốc (không cháy sáng). Esc để huỷ.</p>
+      </div>
       <div class="sec"><h2>Chi tiết &amp; hạt</h2><div id="g-detail"></div></div>
       <div class="sec">
         <h2>LUT 3D <small id="lutInfo">chưa nạp</small></h2>
@@ -878,14 +883,15 @@ function k2rgb(k) {
   const b = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307;
   return [r, g, b].map(v => Math.min(255, Math.max(1, v)) / 255).map(v => Math.pow(v, 2.2));
 }
-function wbMul() {
+const wbMul = () => wbMulFor(R.wbMode, R.k, R.wbR, R.wbB);
+function wbMulFor(mode, k, wbR, wbB) {
   let m = [1, 1, 1];
-  if (R.wbMode === 'k') {
-    const ref = k2rgb(5500), cur = k2rgb(R.k);
+  if (mode === 'k') {
+    const ref = k2rgb(5500), cur = k2rgb(k);
     m = ref.map((v, i) => v / cur[i]);
   }
-  m[0] *= 1 + 0.025 * R.wbR;
-  m[2] *= 1 + 0.025 * R.wbB;
+  m[0] *= 1 + 0.025 * wbR;
+  m[2] *= 1 + 0.025 * wbB;
   const l = 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
   return m.map(v => v / l);
 }
@@ -972,6 +978,7 @@ function setSplit(v) {
 }
 let dragging = false;
 frame.addEventListener('pointerdown', e => {
+  if (picking) { pickWhite(e); return; }
   dragging = true; frame.setPointerCapture(e.pointerId);
   const r = frame.getBoundingClientRect(); setSplit((e.clientX - r.left) / r.width);
 });
@@ -988,9 +995,10 @@ $('knob').addEventListener('keydown', e => {
 $('knob').addEventListener('dblclick', () => setSplit(0.5));
 
 /* ---------- image loading ---------- */
+let preview = null;   // the downscaled source as uploaded; the white-balance picker samples it
 function setSource(el, w, h) {
   source = el; srcW = w; srcH = h;
-  const prev = scaled(el, w, h, Math.min(2048, maxTex));
+  const prev = preview = scaled(el, w, h, Math.min(2048, maxTex));
   uploadTexture(prev);
   canvas.width = prev.width; canvas.height = prev.height;
   layout(); schedule();
@@ -1094,7 +1102,7 @@ $('btnExport').addEventListener('click', () => {
 });
 $('btnClose').addEventListener('click', () => { $('modal').hidden = true; });
 $('modal').addEventListener('click', e => { if (e.target === $('modal')) $('modal').hidden = true; });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').hidden = true; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('modal').hidden = true; setPicking(false); } });
 
 
 /* ---------- recipe → 3D LUT (.cube) ----------
@@ -1451,6 +1459,48 @@ window.addEventListener('hashchange', () => {
   const r = recipeFromHash();
   if (r) { applyRecipe(r); toast('Đã mở recipe “' + r.name + '” từ link.'); }
 });
+
+
+/* ---------- white balance picker ----------
+   Click a grey or white area: the 7×7 average of the source is neutralised by the camera-style controls
+   (Kelvin in 50K steps + R/B shift −9…+9), so the result can also be typed into a Fuji body. */
+let picking = false;
+function setPicking(on) {
+  picking = on;
+  frame.classList.toggle('picking', on);
+  $('btnPickWB').setAttribute('aria-pressed', String(on));
+  $('pickHint').hidden = !on;
+}
+$('btnPickWB').addEventListener('click', () => setPicking(!picking));
+function pickWhite(e) {
+  setPicking(false);
+  if (!preview) return;
+  const r = frame.getBoundingClientRect();
+  const x = Math.round((e.clientX - r.left) / r.width * preview.width), y = Math.round((e.clientY - r.top) / r.height * preview.height);
+  const x0 = Math.max(0, Math.min(preview.width - 7, x - 3)), y0 = Math.max(0, Math.min(preview.height - 7, y - 3));
+  const d = preview.getContext('2d').getImageData(x0, y0, 7, 7).data;
+  const avg = [0, 1, 2].map(k => { let t = 0; for (let i = k; i < d.length; i += 4) t += d[i]; return t / 49 / 255; });
+  if (Math.max(...avg) > 0.97 || Math.max(...avg) < 0.05) {
+    toast('Vùng này quá sáng hoặc quá tối để lấy cân bằng trắng. Chọn vùng xám vừa phải.'); return;
+  }
+  const lin = avg.map(c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  let best = null;
+  for (let k = 2500; k <= 10000; k += 50) for (let wr = -9; wr <= 9; wr++) for (let wb = -9; wb <= 9; wb++) {
+    const m = wbMulFor('k', k, wr, wb), v = lin.map((c, i) => c * m[i]);
+    const err = Math.log(v[0] / v[1]) ** 2 + Math.log(v[2] / v[1]) ** 2 + 1e-5 * (wr * wr + wb * wb);   // prefer Kelvin over shifts
+    if (!best || err < best.err) best = { err, k, wr, wb };
+  }
+  Object.assign(R, { wbMode: 'k', k: best.k, wbR: best.wr, wbB: best.wb });
+  activePreset = -1;
+  syncUI(); schedule();
+  toast(`Cân bằng trắng: ${best.k}K, ${sgn(best.wr)} Red & ${sgn(best.wb)} Blue`);
+}
+
+/* ---------- install as an app (GitHub Pages copy only) ----------
+   index.html links a web manifest; the artifact page does not, and its frame refuses service workers. */
+if ('serviceWorker' in navigator && window.isSecureContext && document.querySelector('link[rel="manifest"]')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 
 /* ---------- boot ---------- */
 buildSims(); buildPresets(); buildControls(); renderSaved();
