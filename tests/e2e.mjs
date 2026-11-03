@@ -65,7 +65,10 @@ const open = async (opts = {}) => {
   return page;
 };
 // every 3rd pixel, skipping 4px at the edges (the split line sits on an edge when dragged fully across)
-const pixels = page => page.evaluate(() => {
+// waits two animation frames first: renders are scheduled with requestAnimationFrame, so a fixed sleep
+// can read a stale frame on a slow CI runner
+const pixels = page => page.evaluate(async () => {
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const c = document.getElementById('gl'), g = c.getContext('webgl'), a = new Uint8Array(c.width * c.height * 4);
   g.readPixels(0, 0, c.width, c.height, g.RGBA, g.UNSIGNED_BYTE, a);
   const out = [];
@@ -89,9 +92,15 @@ check('every preset applies', true, `${PRESETS.length} clicked`);
 // ---- LUT import (float path where available)
 await page.click('#btnReset'); await splitTo(false); await page.waitForTimeout(150);
 const base = (await pixels(page)).data;
-await page.setInputFiles('#lutFile', identityCube); await page.waitForTimeout(300);
+// LUT files are read asynchronously: wait until the panel names the loaded file
+const loadLut = async file => {
+  const name = file.split('/').pop().replace('.cube', '');
+  await page.setInputFiles('#lutFile', file);
+  await page.waitForFunction(n => document.getElementById('lutInfo').textContent.startsWith(n + ' '), name);
+};
+await loadLut(identityCube);
 check('identity LUT leaves the image unchanged', maxDiff(base, (await pixels(page)).data) <= 1, await page.textContent('#lutInfo'));
-await page.setInputFiles('#lutFile', invertCube); await page.waitForTimeout(300);
+await loadLut(invertCube);
 const inv = (await pixels(page)).data;
 const invDiff = maxDiff(base.map((v, i) => i % 4 === 3 ? v : 255 - v), inv);
 check('invert LUT inverts', invDiff <= 1, `max diff ${invDiff}`);
@@ -168,7 +177,8 @@ check('share link restores the recipe', link.includes('#r=') && openedCard === s
 await fresh.close();
 
 // ---- JPEG export
-await page.click('#btnExport'); await page.waitForTimeout(1200);
+await page.click('#btnExport');
+await page.waitForSelector('#modal:not([hidden])', { timeout: 20000 }).catch(() => {});
 check('JPEG export opens', !(await page.$eval('#modal', m => m.hidden)), await page.textContent('#expInfo'));
 await page.click('#btnClose');
 check('no console errors (desktop)', !page.errors.length, page.errors.join(' | '));
@@ -181,7 +191,8 @@ const viewer = await open({
     } };
   },
 });
-await viewer.click('#btnCube'); await viewer.waitForTimeout(800);
+await viewer.click('#btnCube');
+await viewer.waitForFunction(() => window.__saved, null, { timeout: 20000 }).catch(() => {});
 const saved = await viewer.evaluate(() => window.__saved);
 const zipPath = join(tmp, 'export.zip');
 writeFileSync(zipPath, Buffer.from(saved?.bytes || []));
