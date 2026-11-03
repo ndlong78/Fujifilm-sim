@@ -126,6 +126,10 @@ aside.panel { background: var(--panel); border-left: 1px solid var(--line); over
 .json { width: 100%; resize: vertical; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise);
   font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; }
 .saved { display: grid; gap: 6px; }
+.search { display: flex; align-items: center; gap: 8px; }
+.search input, input.share { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--raise); }
+input.share { width: 100%; font-family: var(--font-mono); font-size: 11.5px; }
+.search span { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .presets.fxw { max-height: 430px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
 .presets.fxw .preset, #presetsFxwDrp .preset { display: grid; gap: 2px; }
 #presetsFxwDrp .preset b { white-space: normal; }
@@ -198,12 +202,17 @@ a.btn { text-decoration: none; color: inherit; }
       </div>
       <div class="sec">
         <h2>Recipe dựng sẵn</h2>
+        <div class="search">
+          <input id="presetSearch" type="search" placeholder="Tìm recipe: tên, film sim, DR-P, tác giả…" aria-label="Tìm recipe" autocomplete="off">
+          <span id="presetCount"></span>
+        </div>
+        <p class="hint" id="presetNone" hidden>Không có recipe nào khớp. Thử tên film sim như “classic neg” hoặc “acros”.</p>
         <div class="presets" id="presets"></div>
       </div>
       <div class="sec">
         <h2>Fuji X Weekly <small>top 2026</small></h2>
         <div class="presets fxw saved" id="presetsFxw"></div>
-        <h3 class="subhead">Dùng D-Range Priority</h3>
+        <h3 class="subhead" id="drpHead">Dùng D-Range Priority</h3>
         <div class="presets saved" id="presetsFxwDrp"></div>
         <p class="hint">24 recipe được xem nhiều nhất trên fujixweekly.com (1/1–31/7/2026) và các recipe dùng D-Range Priority, của Ritchie Roesch và cộng sự. Bấm ↗ để đọc bài gốc. App chỉ mô phỏng gần đúng film simulation nên màu sẽ không giống hệt máy thật.</p>
       </div>
@@ -229,7 +238,9 @@ a.btn { text-decoration: none; color: inherit; }
         <div class="inline">
           <input id="recipeName" type="text" maxlength="40" aria-label="Tên recipe" value="Recipe của tôi">
           <button class="btn" id="btnCopy" type="button">Chép</button>
+          <button class="btn" id="btnShare" type="button">Chép link</button>
         </div>
+        <input id="shareUrl" class="share" type="text" readonly aria-label="Link chia sẻ recipe" hidden>
         <pre class="card" id="card"></pre>
         <div class="inline">
           <button class="btn" id="btnSave" type="button">Lưu recipe vào trình duyệt</button>
@@ -1387,6 +1398,60 @@ $('lutFile').addEventListener('change', async e => {
 $('btnLutOff').addEventListener('click', () => { lut = null; syncLutUI(); schedule(); });
 $('in-lutMix').addEventListener('input', () => { if (lut) lut.mix = +$('in-lutMix').value / 100; syncLutUI(); schedule(); });
 
+
+/* ---------- preset search ---------- */
+// accent-insensitive: "ha noi" finds "Hà Nội", "da lat" finds "Đà Lạt"
+const fold = t => t.normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd').toLowerCase();
+function filterPresets() {
+  const words = fold($('presetSearch').value).split(/\s+/).filter(Boolean);
+  let shown = 0;
+  const lists = ['presets', 'presetsFxw', 'presetsFxwDrp'].map(id => $(id));
+  for (const list of lists) {
+    let inList = 0;
+    list.querySelectorAll('.preset').forEach(b => {
+      const p = PRESETS[+b.id.slice(7)];
+      const hay = fold([b.textContent, p.by, p.src && 'fuji x weekly fxw', DRP[p.drp] && 'dr-p d-range priority']
+        .filter(Boolean).join(' '));
+      const hit = words.every(w => hay.includes(w));
+      (b.closest('.item') || b).hidden = !hit;
+      if (hit) { shown++; inList++; }
+    });
+    list.hidden = !inList;
+  }
+  $('drpHead').hidden = $('presetsFxwDrp').hidden;
+  $('presetCount').textContent = words.length ? `${shown}/${PRESETS.length}` : `${PRESETS.length}`;
+  $('presetNone').hidden = shown > 0;
+}
+$('presetSearch').addEventListener('input', filterPresets);
+
+/* ---------- share a recipe as a link (#r=…) ----------
+   The recipe travels in the URL fragment, so it never reaches a server. Inside the Claude artifact viewer
+   the page URL cannot carry a fragment, so links point at the public GitHub Pages copy. */
+const PUBLIC_URL = 'https://ndlong78.github.io/Fujifilm-sim/';
+const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64url = t => Uint8Array.from(atob(t.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+function shareLink() {
+  const r = sanitize({ ...R, name: ($('recipeName').value || 'Recipe').trim() });
+  const slim = { sim: r.sim };                           // only what differs from the defaults
+  for (const k of Object.keys(DEFAULTS)) if (k !== 'sim' && r[k] !== DEFAULTS[k]) slim[k] = r[k];
+  const base = /^https?:$/.test(location.protocol) && !window.claude ? location.href.split('#')[0] : PUBLIC_URL;
+  return base + '#r=' + b64url(new TextEncoder().encode(JSON.stringify(slim)));
+}
+function recipeFromHash() {
+  const m = location.hash.match(/^#r=([\w-]+)$/);
+  if (!m) return null;
+  try { return sanitize(JSON.parse(new TextDecoder().decode(unb64url(m[1])))); } catch { return null; }
+}
+$('btnShare').addEventListener('click', () => {
+  const link = shareLink(), out = $('shareUrl');
+  out.value = link; out.hidden = false;
+  copyText(link, 'Đã chép link recipe.', () => { out.focus(); out.select(); });
+});
+window.addEventListener('hashchange', () => {
+  const r = recipeFromHash();
+  if (r) { applyRecipe(r); toast('Đã mở recipe “' + r.name + '” từ link.'); }
+});
+
 /* ---------- boot ---------- */
 buildSims(); buildPresets(); buildControls(); renderSaved();
 let ok = false;
@@ -1394,7 +1459,10 @@ try { ok = initGL(); } catch (err) { console.error(err); }
 if (!ok) {
   stage.innerHTML = '<p class="glfail">Trình duyệt này không bật được WebGL nên không xử lý ảnh được. Hãy bật tăng tốc phần cứng hoặc thử Chrome/Safari bản mới.</p>';
 } else {
-  applyRecipe(PRESETS[0], 0);
+  const shared = recipeFromHash();
+  if (shared) { applyRecipe(shared); setTimeout(() => toast('Đã mở recipe “' + shared.name + '” từ link.'), 300); }
+  else applyRecipe(PRESETS[0], 0);
+  filterPresets();
   const c = makeSample(); setSource(c, c.width, c.height);
   setSplit(0.5);
 }

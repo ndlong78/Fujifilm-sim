@@ -10,6 +10,7 @@ Web app chạy hoàn toàn trên trình duyệt: tải ảnh lên, áp Film Simu
 - 7 recipe dựng sẵn, recipe card để chép lên máy, lưu recipe vào localStorage.
 - 24 recipe phổ biến nhất của [Fuji X Weekly](https://fujixweekly.com/recipes/) (bảng xếp hạng 1/1–31/7/2026), mỗi recipe có link về bài gốc, cùng 6 recipe dùng D-Range Priority (Vibrant Arizona X-Trans IV, Pulled Fujicolor Superia, Portra-Style, Scanned Superia, Kodak Portra 160 v2, Expired Kodak Vision2 250D). Thiết lập máy mà app chưa có (WB Fluorescent, chọn filter Acros) được xấp xỉ và ghi chú ngay trong recipe card.
 - D-Range Priority theo số đo in-camera của Fuji X Weekly trên X-Trans V: Auto = DR200 H-1 S-1, Weak = DR200 H-2 S-3; Strong là ước lượng (shadow như DR400 S-2, highlight nén mạnh hơn). DR-Auto hiển thị như DR200.
+- Tìm recipe không cần gõ dấu ("ha noi", "classic neg dr-p"), chia sẻ recipe qua link `#r=…` (recipe nằm trong phần `#` của URL, không gửi lên server nào).
 - Thanh so sánh trước/sau, kéo-thả / dán ảnh, xuất JPEG độ phân giải gốc (tối đa 6144px).
 - **Xuất recipe ra LUT `.cube` 33³** để dùng trong Lightroom, Photoshop, Capture One, DaVinci (ảnh JPEG / video Rec.709, không dùng cho Log). LUT được nướng bằng chính shader của app nên khớp ảnh trong app; không gồm grain, sharpness, clarity. Trong Claude Artifact, file được gói trong `.zip`.
 - Nạp LUT 3D `.cube` (đến 129³, hỗ trợ `DOMAIN_MIN/MAX`) với thanh cường độ; LUT áp sau film sim, trước sharpness/grain. Texture LUT dùng float32, tự lùi về float16 rồi 8-bit nếu GPU không hỗ trợ lọc tuyến tính (độ chính xác hiện ở góc mục LUT).
@@ -49,7 +50,7 @@ Giá trị hiện tại chỉnh tay theo mô tả của Fujifilm, **không phả
 ## Kiểm thử
 GitHub Actions (`.github/workflows/test.yml`) chạy trên mỗi lần push / pull request:
 - `index.html` phải khớp với `./build.sh` (quên build là CI đỏ).
-- `tests/e2e.mjs` — mở trang trong Chromium headless: preset hợp lệ, nạp LUT, JSON, D-Range Priority, xuất `.cube` (áp LUT lên ảnh phải khớp ảnh render), xuất JPEG, bản `.zip` trong Claude Artifact, bố cục 400px.
+- `tests/e2e.mjs` — mở trang trong Chromium headless: preset hợp lệ, nạp LUT, JSON, D-Range Priority, tìm recipe, link chia sẻ, xuất `.cube` (áp LUT lên ảnh phải khớp ảnh render), xuất JPEG, bản `.zip` trong Claude Artifact, bố cục 400px.
 - `tests/parity.mjs` — `tools/simmodel.py` khớp shader WebGL từng pixel.
 - `tests/test_calibrate.py` — `tools/calibrate.py` tìm lại đúng tham số từ cặp ảnh tổng hợp.
 

@@ -144,6 +144,29 @@ errs.sort((a, b) => a - b);
 const mean = errs.reduce((a, b) => a + b, 0) / errs.length, p99 = errs[Math.floor(errs.length * 0.99)];
 check('.cube matches the live render', mean < 1.5 && p99 < 6, `mean ${mean.toFixed(2)}, p99 ${p99.toFixed(1)} levels`);
 
+// ---- preset search (accent-insensitive) and share link round trip
+await page.fill('#presetSearch', 'ha noi'); await page.dispatchEvent('#presetSearch', 'input');
+const visible = () => page.$$eval('.preset[id^="preset-"]', e => e.filter(b => !(b.closest('.item') || b).hidden).map(b => b.querySelector('b').textContent));
+const hn = await visible();
+check('search folds accents', hn.length === 1 && hn[0] === 'Hà Nội Mùa Đông', hn.join(', '));
+await page.fill('#presetSearch', 'classic neg dr-p'); await page.dispatchEvent('#presetSearch', 'input');
+const cnDrp = await visible();
+check('search combines words', cnDrp.length === 2 && await page.$eval('#drpHead', h => !h.hidden), cnDrp.join(', '));
+await page.fill('#presetSearch', 'zzz'); await page.dispatchEvent('#presetSearch', 'input');
+check('empty search result is explained', !(await page.$eval('#presetNone', e => e.hidden)) && (await page.textContent('#presetCount')) === '0/' + PRESETS.length);
+await page.fill('#presetSearch', ''); await page.dispatchEvent('#presetSearch', 'input');
+
+await page.click('#preset-' + PRESETS.findIndex(p => p.name === 'Pacific Blues (X-Trans V)'));
+await setRange(page, 'in-wbR', 3);                 // a modified recipe, not just a preset
+const sharedCard = (await page.textContent('#card')).split('\n').slice(0, 12).join('\n');
+await page.click('#btnShare');
+const link = await page.inputValue('#shareUrl');
+const fresh = await open();
+await fresh.goto(link.replace(/^https?:\/\/[^#]+/, url)); await fresh.waitForTimeout(800);
+const openedCard = (await fresh.textContent('#card')).split('\n').slice(0, 12).join('\n');
+check('share link restores the recipe', link.includes('#r=') && openedCard === sharedCard, `${link.length} chars`);
+await fresh.close();
+
 // ---- JPEG export
 await page.click('#btnExport'); await page.waitForTimeout(1200);
 check('JPEG export opens', !(await page.$eval('#modal', m => m.hidden)), await page.textContent('#expInfo'));
