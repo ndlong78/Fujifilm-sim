@@ -12,7 +12,7 @@ Scenes with many saturated colours (a ColorChecker, flowers, signage) constrain 
   python3 tools/calibrate.py base.jpg acros_r.jpg --sim acros --filter r
 
 Prints error before/after (OKLab distance x100, about 1 = just noticeable) and a SIMS entry to paste
-into film-sim-lab.html, then run ./build.sh and node tools/parity_test.mjs.
+into film-sim-lab.html, then run ./build.sh and node tests/parity.mjs.
 """
 import argparse
 import json

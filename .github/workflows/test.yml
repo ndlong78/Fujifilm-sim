@@ -1,0 +1,44 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          pip install numpy scipy pillow
+
+      - name: index.html is built from film-sim-lab.html
+        run: |
+          ./build.sh
+          git diff --exit-code index.html || { echo "::error::index.html is stale: run ./build.sh and commit it"; exit 1; }
+
+      - name: End-to-end tests
+        run: node tests/e2e.mjs
+
+      - name: Python model matches the WebGL shader
+        run: node tests/parity.mjs
+
+      - name: Calibration recovers known parameters
+        run: python3 tests/test_calibrate.py

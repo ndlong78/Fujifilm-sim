@@ -240,7 +240,9 @@ a.btn { text-decoration: none; color: inherit; }
         <pre class="card" id="card"></pre>
         <div class="inline">
           <button class="btn" id="btnSave" type="button">Lưu recipe vào trình duyệt</button>
+          <button class="btn" id="btnCube" type="button">Xuất LUT .cube</button>
         </div>
+        <p class="hint">LUT 33³ mang recipe sang Lightroom, Photoshop, Capture One, DaVinci (ảnh JPEG hoặc video Rec.709). Không gồm grain, sharpness, clarity.</p>
         <div class="saved" id="saved"></div>
         <p class="hint" id="savedHint">Recipe lưu ở trình duyệt này, máy khác không thấy.</p>
       </div>
@@ -885,10 +887,13 @@ function wbMul() {
 }
 
 const wrap7 = a => [...a, a[0]];
-function render(splitPos = split) {
+// target: optional { w, h, colorOnly } for off-screen renders; colorOnly drops the spatial effects
+// (sharpness, clarity, grain) so the output is a pure per-pixel colour transform, e.g. for LUT baking
+function render(splitPos = split, target = null) {
   if (!tex) return;
   const s = SIM[R.sim];
-  const W = canvas.width, H = canvas.height, longSide = Math.max(W, H);
+  const W = target ? target.w : canvas.width, H = target ? target.h : canvas.height, longSide = Math.max(W, H);
+  const spatial = !(target && target.colorOnly);
   gl.viewport(0, 0, W, H);
   gl.uniform1i(U.uTex, 0);
   gl.uniform2f(U.uTexel, 1 / texW, 1 / texH);
@@ -923,11 +928,11 @@ function render(splitPos = split) {
   const tb = s.toneBase || [0, 0];
   gl.uniform2f(U.uTone, tb[0] + 0.0015 * R.wc + 0.005 * R.mg, tb[1] + 0.006 * R.wc);
   gl.uniform1fv(U.uCtr, wrap7(SECTOR_HUES).map((v, i) => i === 6 ? v + 360 : v));
-  gl.uniform1f(U.uSharpK, R.sharp > 0 ? R.sharp * 0.45 : R.sharp * 0.2);
-  gl.uniform1f(U.uClarK, R.clarity * 0.1);
+  gl.uniform1f(U.uSharpK, !spatial ? 0 : R.sharp > 0 ? R.sharp * 0.45 : R.sharp * 0.2);
+  gl.uniform1f(U.uClarK, spatial ? R.clarity * 0.1 : 0);
   gl.uniform1f(U.uClarR, Math.max(texW, texH) * 0.01);
   const grain = [0, 0.045, 0.085][R.grain] + (s.grainBase || 0);
-  gl.uniform1f(U.uGrain, grain);
+  gl.uniform1f(U.uGrain, spatial ? grain : 0);
   gl.uniform1f(U.uGrainCell, Math.max(0.8, (longSide / 1800) * (R.grainSize === 'L' ? 2.0 : 1.1)));
   gl.uniform1i(U.uLut, 1);
   gl.uniform1f(U.uLutMix, lut ? lut.mix : 0);
@@ -1086,6 +1091,120 @@ $('btnExport').addEventListener('click', () => {
 $('btnClose').addEventListener('click', () => { $('modal').hidden = true; });
 $('modal').addEventListener('click', e => { if (e.target === $('modal')) $('modal').hidden = true; });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').hidden = true; });
+
+
+/* ---------- recipe → 3D LUT (.cube) ----------
+   The current recipe is baked by running the real shader over an N³ grid of input colours laid out as
+   N slices of N×N (x = blue·N + red, y = green), off-screen and without spatial effects. Float render
+   targets keep full precision where the GPU allows (OES_texture_float + WEBGL_color_buffer_float). */
+const CUBE_N = 33;
+function bakeCube(n) {
+  const w = n * n, h = n, len = w * h * 4;
+  const mkTex = (type, data) => {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, type, data);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST],
+      [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    return t;
+  };
+  const bake = useFloat => {
+    const type = useFloat ? gl.FLOAT : gl.UNSIGNED_BYTE, one = useFloat ? 1 : 255;
+    const grid = useFloat ? new Float32Array(len) : new Uint8Array(len);
+    for (let b = 0; b < n; b++) for (let g = 0; g < n; g++) for (let r = 0; r < n; r++) {
+      const o = (g * w + b * n + r) * 4;
+      grid[o] = r / (n - 1) * one; grid[o + 1] = g / (n - 1) * one; grid[o + 2] = b / (n - 1) * one; grid[o + 3] = one;
+      if (!useFloat) for (let k = 0; k < 3; k++) grid[o + k] = Math.round(grid[o + k]);
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    const inTex = mkTex(type, grid), outTex = mkTex(type, null), fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, outTex, 0);
+    let out = null;
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+      const keep = [tex, texW, texH];
+      tex = inTex; texW = w; texH = h;
+      gl.bindTexture(gl.TEXTURE_2D, inTex);
+      while (gl.getError() !== gl.NO_ERROR);
+      render(-1, { w, h, colorOnly: true });
+      out = useFloat ? new Float32Array(len) : new Uint8Array(len);
+      gl.readPixels(0, 0, w, h, gl.RGBA, type, out);
+      if (gl.getError() !== gl.NO_ERROR) out = null;
+      [tex, texW, texH] = keep;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fbo); gl.deleteTexture(inTex); gl.deleteTexture(outTex);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    return out && { data: out, scale: one, prec: useFloat ? 'float32' : '8-bit' };
+  };
+  const canFloat = gl.getExtension('OES_texture_float') && gl.getExtension('WEBGL_color_buffer_float');
+  return (canFloat && bake(true)) || bake(false);
+}
+function cubeText(baked, n) {
+  const name = ($('recipeName').value || 'Film Sim Lab').trim().replace(/"/g, "'");
+  const L = [`TITLE "${name}"`,
+    `# Film Sim Lab - ${simLabel()} - ${drText(R)} - ${wbLabel(R)} R${sgn(R.wbR)} B${sgn(R.wbB)} - ${fmtEV(R.ev)} EV`,
+    '# Input and output: sRGB, display-referred (JPEG, Rec.709 footage). Not for Log footage.',
+    '# Not included: grain, sharpness, clarity (spatial effects, not colour).'];
+  if (lut && lut.mix > 0) L.push(`# Includes loaded LUT "${lut.name}" at ${Math.round(lut.mix * 100)}%.`);
+  L.push(`LUT_3D_SIZE ${n}`, 'DOMAIN_MIN 0.0 0.0 0.0', 'DOMAIN_MAX 1.0 1.0 1.0');
+  const d = baked.data, k = 1 / baked.scale, w = n * n;
+  for (let b = 0; b < n; b++) for (let g = 0; g < n; g++) for (let r = 0; r < n; r++) {
+    const o = (g * w + b * n + r) * 4;
+    L.push(`${(d[o] * k).toFixed(6)} ${(d[o + 1] * k).toFixed(6)} ${(d[o + 2] * k).toFixed(6)}`);
+  }
+  return L.join('\n') + '\n';
+}
+// minimal single-file ZIP (stored, no compression): the artifact viewer saves .zip but not .cube
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+function zipOne(filename, text) {
+  const enc = new TextEncoder(), data = enc.encode(text), fn = enc.encode(filename);
+  let crc = ~0;
+  for (const byte of data) crc = CRC_TABLE[(crc ^ byte) & 255] ^ (crc >>> 8);
+  crc = ~crc >>> 0;
+  const buf = new Uint8Array(30 + fn.length + data.length + 46 + fn.length + 22), v = new DataView(buf.buffer);
+  const head = (o, sig, central) => {   // shared fields of the local and central headers
+    v.setUint32(o, sig, true); let p = o + 4;
+    if (central) { v.setUint16(p, 20, true); p += 2; }
+    v.setUint16(p, 20, true); v.setUint16(p + 2, 0x0800, true); v.setUint16(p + 4, 0, true);   // version, UTF-8 name, stored
+    v.setUint16(p + 6, 0, true); v.setUint16(p + 8, 33, true);                                     // 1980-01-01 00:00
+    v.setUint32(p + 10, crc, true); v.setUint32(p + 14, data.length, true); v.setUint32(p + 18, data.length, true);
+    v.setUint16(p + 22, fn.length, true);
+    return p + 26;                     // extra length (0) at p+24, then name or central-only fields
+  };
+  let p = head(0, 0x04034b50, false);
+  buf.set(fn, p); buf.set(data, p + fn.length);
+  const cd = p + fn.length + data.length;
+  p = head(cd, 0x02014b50, true) + 10;   // comment len, disk, int attr (2+2+2) and ext attr (4) all zero; offset 0
+  v.setUint32(p, 0, true); buf.set(fn, p + 4);
+  const end = p + 4 + fn.length;
+  v.setUint32(end, 0x06054b50, true); v.setUint16(end + 8, 1, true); v.setUint16(end + 10, 1, true);
+  v.setUint32(end + 12, end - cd, true); v.setUint32(end + 16, cd, true);
+  return buf;
+}
+const fileBase = () => ($('recipeName').value || 'film-sim-lab').trim().replace(/[^\p{L}\p{N} _.-]+/gu, '').replace(/\s+/g, ' ').slice(0, 60) || 'film-sim-lab';
+$('btnCube').addEventListener('click', async () => {
+  if (!gl || !tex) return;
+  const baked = bakeCube(CUBE_N);
+  schedule();
+  if (!baked) { toast('GPU này không xuất được LUT.'); return; }
+  const text = cubeText(baked, CUBE_N), base = fileBase();
+  const downloads = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
+  if (downloads) {
+    try {
+      await downloads.save({ filename: base + '.zip', data: new Blob([zipOne(base + '.cube', text)]) });
+      toast(`Đã lưu ${base}.zip, giải nén để lấy file .cube.`);
+    } catch (e) { if (e?.code !== 'declined') toast('Không lưu được file: ' + (e?.message || e?.code || e)); }
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = base + '.cube';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(`Đã xuất ${base}.cube (${CUBE_N}³, ${baked.prec}).`);
+});
 
 /* ---------- recipe card, copy, saved recipes ---------- */
 let toastTimer = 0;

@@ -1,5 +1,5 @@
 // Checks tools/simmodel.py against the real WebGL shader, pixel by pixel, for every film simulation.
-// Usage: node tools/parity_test.mjs   (needs the `playwright` package and python3 with numpy)
+// Usage: node tests/parity.mjs   (needs the `playwright` package and python3 with numpy)
 // Renders the built-in sample chart, reads the GPU output with the split handle at each edge
 // (all-original / all-processed), then runs the Python model on the same input.
 import { createRequire } from 'node:module';

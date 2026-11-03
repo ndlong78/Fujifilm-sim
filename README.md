@@ -11,6 +11,7 @@ Web app chạy hoàn toàn trên trình duyệt: tải ảnh lên, áp Film Simu
 - 24 recipe phổ biến nhất của [Fuji X Weekly](https://fujixweekly.com/recipes/) (bảng xếp hạng 1/1–31/7/2026), mỗi recipe có link về bài gốc, cùng 6 recipe dùng D-Range Priority (Vibrant Arizona X-Trans IV, Pulled Fujicolor Superia, Portra-Style, Scanned Superia, Kodak Portra 160 v2, Expired Kodak Vision2 250D). Thiết lập máy mà app chưa có (WB Fluorescent, chọn filter Acros) được xấp xỉ và ghi chú ngay trong recipe card.
 - D-Range Priority theo số đo in-camera của Fuji X Weekly trên X-Trans V: Auto = DR200 H-1 S-1, Weak = DR200 H-2 S-3; Strong là ước lượng (shadow như DR400 S-2, highlight nén mạnh hơn). DR-Auto hiển thị như DR200.
 - Thanh so sánh trước/sau, kéo-thả / dán ảnh, xuất JPEG độ phân giải gốc (tối đa 6144px).
+- **Xuất recipe ra LUT `.cube` 33³** để dùng trong Lightroom, Photoshop, Capture One, DaVinci (ảnh JPEG / video Rec.709, không dùng cho Log). LUT được nướng bằng chính shader của app nên khớp ảnh trong app; không gồm grain, sharpness, clarity. Trong Claude Artifact, file được gói trong `.zip`.
 - Nạp LUT 3D `.cube` (đến 129³, hỗ trợ `DOMAIN_MIN/MAX`) với thanh cường độ; LUT áp sau film sim, trước sharpness/grain. Texture LUT dùng float32, tự lùi về float16 rồi 8-bit nếu GPU không hỗ trợ lọc tuyến tính (độ chính xác hiện ở góc mục LUT).
 - Đồng bộ recipe bằng JSON: chép recipe hiện tại hoặc toàn bộ recipe đã lưu, dán/mở file `.json` để nạp (giá trị ngoài dải được kẹp về giới hạn của máy).
 
@@ -23,7 +24,7 @@ python3 -m http.server 8000   # http://localhost:8000
 ## Cấu trúc
 - `film-sim-lab.html` — **file nguồn** (fragment, cũng dùng cho Claude Artifact). Chỉ sửa file này.
 - `index.html` — trang hoàn chỉnh cho GitHub Pages, sinh ra bằng `./build.sh`. Sau khi sửa nguồn, chạy `./build.sh` rồi commit cả hai.
-- `tools/simmodel.py` — bản NumPy của pipeline màu trong shader; `tools/parity_test.mjs` kiểm tra hai bản khớp nhau từng pixel.
+- `tools/simmodel.py` — bản NumPy của pipeline màu trong shader.
 - `tools/calibrate.py` — fit tham số một sim từ cặp ảnh Fuji thật.
 
 ## Mô hình màu
@@ -43,4 +44,18 @@ Giá trị hiện tại chỉnh tay theo mô tả của Fujifilm, **không phả
    python3 tools/calibrate.py base.jpg target.jpg --sim cc        # mono: --sim acros --filter r
    ```
    Script in sai số trước/sau (khoảng cách OKLab ×100, ~1 là ngưỡng mắt thấy) và dòng `SIMS` mới để dán vào `film-sim-lab.html`.
-3. `./build.sh`, rồi `node tools/parity_test.mjs` (cần `playwright`) để chắc shader và bản Python vẫn khớp.
+3. `./build.sh`, rồi `node tests/parity.mjs` (cần `playwright`) để chắc shader và bản Python vẫn khớp.
+
+## Kiểm thử
+GitHub Actions (`.github/workflows/test.yml`) chạy trên mỗi lần push / pull request:
+- `index.html` phải khớp với `./build.sh` (quên build là CI đỏ).
+- `tests/e2e.mjs` — mở trang trong Chromium headless: preset hợp lệ, nạp LUT, JSON, D-Range Priority, xuất `.cube` (áp LUT lên ảnh phải khớp ảnh render), xuất JPEG, bản `.zip` trong Claude Artifact, bố cục 400px.
+- `tests/parity.mjs` — `tools/simmodel.py` khớp shader WebGL từng pixel.
+- `tests/test_calibrate.py` — `tools/calibrate.py` tìm lại đúng tham số từ cặp ảnh tổng hợp.
+
+Chạy local:
+```bash
+npm ci && npx playwright install chromium
+pip install numpy scipy pillow
+./build.sh && npm test
+```

@@ -3,7 +3,7 @@
 Covers the part that defines a film simulation: sRGB decode, tone curve, OKLCh per-hue edits,
 split-tone, gamut mapping and the monochrome branch. Recipe controls are at camera defaults
 (DR100, AWB, Highlight/Shadow/Color 0, Color Chrome Off, no sharpness/clarity/grain/LUT),
-which is how calibration pairs should be shot. tools/parity_test.mjs checks this file against
+which is how calibration pairs should be shot. tests/parity.mjs checks this file against
 the real WebGL output; keep both in step when the shader changes.
 """
 import numpy as np
