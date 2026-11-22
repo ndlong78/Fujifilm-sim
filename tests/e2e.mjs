@@ -164,7 +164,17 @@ const cnDrp = await visible();
 check('search combines words', cnDrp.length === 2 && await page.$eval('#drpHead', h => !h.hidden), cnDrp.join(', '));
 await page.fill('#presetSearch', 'zzz'); await page.dispatchEvent('#presetSearch', 'input');
 check('empty search result is explained', !(await page.$eval('#presetNone', e => e.hidden)) && (await page.textContent('#presetCount')) === '0/' + PRESETS.length);
+await page.fill('#presetSearch', 'dietcofee'); await page.dispatchEvent('#presetSearch', 'input');
+const dc = await visible();
+check('search finds the card author', dc.length === 2, dc.join(', '));
 await page.fill('#presetSearch', ''); await page.dispatchEvent('#presetSearch', 'input');
+
+// ---- FUJISTYLE cards keep the camera wording, NR line and source
+check('FUJISTYLE group lists 9 cards', (await page.$$eval('#presetsFs .preset', e => e.length)) === 9);
+await page.click('#preset-' + PRESETS.findIndex(p => p.name === 'Greg’s recipe'));
+const gc = await page.textContent('#card');
+check('FUJISTYLE card wording', gc.includes('White Balance: Auto White Priority, +5 Red & -5 Blue') && gc.includes('High ISO NR: -3')
+  && gc.includes('Exposure Compensation: không ghi trên thẻ') && gc.includes('ảnh mẫu: Leikermarco'));
 
 await page.click('#preset-' + PRESETS.findIndex(p => p.name === 'Pacific Blues (X-Trans V)'));
 await setRange(page, 'in-wbR', 3);                 // a modified recipe, not just a preset

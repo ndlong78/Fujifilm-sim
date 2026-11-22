@@ -134,7 +134,8 @@ input.share { width: 100%; font-family: var(--font-mono); font-size: 11.5px; }
 .search span { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .presets.fxw { max-height: 430px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
 .presets.fxw .preset, #presetsFxwDrp .preset { display: grid; gap: 2px; }
-#presetsFxwDrp .preset b { white-space: normal; }
+#presetsFxwDrp .preset b, #presetsFs .preset b { white-space: normal; }
+#presetsFs .preset { display: grid; gap: 2px; }
 .subhead { margin: 4px 0 0; font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .presets.fxw .preset b { white-space: normal; }
 .presets.fxw .del { flex: none; }
@@ -217,6 +218,11 @@ a.btn { text-decoration: none; color: inherit; }
         <h3 class="subhead" id="drpHead">Dùng D-Range Priority</h3>
         <div class="presets saved" id="presetsFxwDrp"></div>
         <p class="hint">24 recipe được xem nhiều nhất trên fujixweekly.com (1/1–31/7/2026) và các recipe dùng D-Range Priority, của Ritchie Roesch và cộng sự. Bấm ↗ để đọc bài gốc. App chỉ mô phỏng gần đúng film simulation nên màu sẽ không giống hệt máy thật.</p>
+      </div>
+      <div class="sec" id="secFs">
+        <h2>FUJISTYLE <small>thẻ recipe bạn gửi</small></h2>
+        <div class="presets saved" id="presetsFs"></div>
+        <p class="hint">Chép từ thẻ recipe của app FUJISTYLE; tên sau film sim là chủ ảnh mẫu trên thẻ. Thẻ không ghi bù sáng, app để 0 EV.</p>
       </div>
       <div class="sec"><h2>Tông &amp; dải sáng</h2><div class="row-group" id="g-tone"></div></div>
       <div class="sec"><h2>Màu</h2><div id="g-color"></div></div>
@@ -450,7 +456,32 @@ const FXW_DRP_PRESETS = [
     sim: 'ebb', drp: 'auto', color: -2, sharp: -2, clarity: -2, grain: 1, grainSize: 'S', cc: 2, fxb: 0, wbMode: 'k', k: 8700, wbR: -4, wbB: -3, ev: 0,
     orig: { fxb: 'Off (X-Trans V); Weak (X-Trans IV)', exp: '-1/3 to +2/3 (typically)' } },
 ];
-PRESETS.push(...FXW_PRESETS, ...FXW_DRP_PRESETS);
+
+/* Recipe cards from the FUJISTYLE app, sent in by the user (2026-11). Settings transcribed from the cards;
+   `by` is the handle shown on the card's sample photo. The cards give no exposure compensation;
+   `nr` (High ISO NR) and `iso` are printed on the recipe card but not simulated. */
+const FS_NOTE = 'Thẻ không ghi bù sáng; app để 0 EV.';
+const FS_PRESETS = [
+  { name: 'Japanese Sea', by: 'mmm', sim: 'cc', dr: 400, hl: -1, sh: -1.5, color: 3, sharp: 1, clarity: 0, grain: 0, cc: 1, fxb: 1,
+    wbMode: 'auto', wbR: -1, wbB: 2, ev: 0, orig: { nr: -2 } },
+  { name: 'Classic Continental', by: 'Vinnyt23', sim: 'cn', dr: 'auto', hl: -1, sh: -0.5, color: 1, sharp: -1, clarity: 0, grain: 1, grainSize: 'S', cc: 1, fxb: 1,
+    wbMode: 'k', k: 6500, wbR: 0, wbB: 0, ev: 0, orig: { nr: -4 } },
+  { name: 'Kodak Tri-X 400 (FUJISTYLE)', cam: 'GFX100S', by: 'Nguyenjurgen', sim: 'acros', filter: 'std', dr: 100, hl: 0, sh: 3, sharp: 1, clarity: 4, grain: 2, grainSize: 'L', cc: 2, fxb: 0,
+    wbMode: 'day', wbR: 9, wbB: -9, ev: 0, orig: { nr: -4, iso: '100' } },
+  { name: 'Picnic', cam: 'X-E4', by: 'Zenitsu', sim: 'cn', dr: 400, hl: -1, sh: -1, color: 2, sharp: -4, clarity: 0, grain: 2, grainSize: 'S', cc: 1, fxb: 1,
+    wbMode: 'k', k: 6300, wbR: -3, wbB: -3, ev: 0, orig: { nr: -4 } },
+  { name: 'August 1969', cam: 'X-T5', by: 'BenTakesPicturesofStuff', sim: 'cn', dr: 400, hl: -1.5, sh: -2, color: 4, sharp: 0, clarity: 0, grain: 1, grainSize: 'S', cc: 2, fxb: 0,
+    wbMode: 'k', k: 6000, wbR: -2, wbB: 0, ev: 0, orig: { nr: -4, iso: '800' } },
+  { name: 'Portra 800 (FUJISTYLE)', cam: 'X100VI', by: 'Udo Wuerth', sim: 'cc', dr: 400, hl: 0, sh: -1, color: -4, sharp: -2, clarity: -4, grain: 1, grainSize: 'S', cc: 2, fxb: 0,
+    wbMode: 'day', wbR: 3, wbB: -5, ev: 0, orig: { nr: 0 } },
+  { name: 'Greg’s recipe', cam: 'X100VI', by: 'Leikermarco', sim: 'cn', dr: 200, hl: -1, sh: -1, color: 4, sharp: -4, clarity: 0, grain: 0, cc: 2, fxb: 0,
+    wbMode: 'auto', wbR: 5, wbB: -5, ev: 0, orig: { wb: 'Auto White Priority', nr: -3 } },
+  { name: 'Last Summer Roll V2', by: 'dietcofee', sim: 'provia', dr: 400, hl: -2, sh: 0.5, color: 3, sharp: 0, clarity: 0, grain: 0, cc: 2, fxb: 2,
+    wbMode: 'auto', wbR: 2, wbB: -5, ev: 0, orig: { nr: -4 } },
+  { name: 'Hybrid Versatile', cam: 'X100VI', by: 'dietcofee', sim: 'cc', dr: 200, hl: -2, sh: -2, color: 3, sharp: 0, clarity: 0, grain: 0, cc: 2, fxb: 0,
+    wbMode: 'auto', wbR: 4, wbB: -6, ev: 0, orig: { nr: -4 } },
+].map(p => ({ ...p, group: 'fujistyle', note: FS_NOTE, orig: { exp: 'không ghi trên thẻ', ...p.orig } }));
+PRESETS.push(...FXW_PRESETS, ...FXW_DRP_PRESETS, ...FS_PRESETS);
 
 /* ---------- formatting ---------- */
 const sgn = v => (v > 0 ? '+' : '') + (Number.isInteger(v) ? v : v.toFixed(1));
@@ -559,8 +590,10 @@ function buildPresets() {
     b.type = 'button'; b.className = 'preset'; b.id = 'preset-' + i;
     b.innerHTML = `<b></b><span></span>`;
     b.querySelector('b').textContent = (p.rank ? '#' + p.rank + ' ' : '') + p.name;
-    b.querySelector('span').textContent = SIM[p.sim].name + (p.filter && p.filter !== 'std' ? FILTER_SUFFIX[p.filter] : '') + ' · ' + drText(p);
+    b.querySelector('span').textContent = SIM[p.sim].name + (p.filter && p.filter !== 'std' ? FILTER_SUFFIX[p.filter] : '') + ' · ' + drText(p)
+      + (p.group === 'fujistyle' ? ' · ' + p.by : '');
     b.addEventListener('click', () => applyRecipe(p, i));
+    if (p.group === 'fujistyle') { $('presetsFs').appendChild(b); return; }
     if (!p.src) { $('presets').appendChild(b); return; }
     const item = document.createElement('div'); item.className = 'item';
     const a = document.createElement('a');
@@ -627,7 +660,13 @@ function cardText() {
   else L.push('Color: ' + sgn(R.color));
   L.push('Sharpness: ' + sgn(R.sharp));
   L.push('Clarity: ' + sgn(R.clarity));
+  if (o.nr !== undefined) L.push('High ISO NR: ' + sgn(o.nr));
+  if (o.iso) L.push('ISO: ' + o.iso);
   L.push('Exposure Compensation: ' + (o.exp || fmtEV(R.ev)));
+  if (pre && pre.group === 'fujistyle') {
+    L.push('', 'Ghi chú: ' + pre.note);
+    L.push('Nguồn: thẻ recipe FUJISTYLE app' + (pre.cam ? ', ' + pre.cam : '') + ' — ảnh mẫu: ' + pre.by);
+  }
   if (pre && pre.src) {
     L.push('');
     if (pre.note) L.push('Ghi chú: ' + pre.note);
@@ -1413,12 +1452,12 @@ const fold = t => t.normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd')
 function filterPresets() {
   const words = fold($('presetSearch').value).split(/\s+/).filter(Boolean);
   let shown = 0;
-  const lists = ['presets', 'presetsFxw', 'presetsFxwDrp'].map(id => $(id));
+  const lists = ['presets', 'presetsFxw', 'presetsFxwDrp', 'presetsFs'].map(id => $(id));
   for (const list of lists) {
     let inList = 0;
     list.querySelectorAll('.preset').forEach(b => {
       const p = PRESETS[+b.id.slice(7)];
-      const hay = fold([b.textContent, p.by, p.src && 'fuji x weekly fxw', DRP[p.drp] && 'dr-p d-range priority']
+      const hay = fold([b.textContent, p.by, p.cam, p.src && 'fuji x weekly fxw', p.group === 'fujistyle' && 'fujistyle', DRP[p.drp] && 'dr-p d-range priority']
         .filter(Boolean).join(' '));
       const hit = words.every(w => hay.includes(w));
       (b.closest('.item') || b).hidden = !hit;
